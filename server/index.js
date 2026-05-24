@@ -7,7 +7,7 @@ const port = 3001;
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-const uri = 'mongodb+srv://Galangcouye:feridah4ever%40@cluster0.mongodb.net/?retryWrites=true&w=majority';
+const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
 const dbName = 'gaming_store';
 
