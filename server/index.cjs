@@ -57,12 +57,20 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/games', async (req, res) => {
   try {
     const games = await db.collection('games').find({}).toArray();
-    res.json({ documents: games.map(doc => ({ ...doc, $id: doc._id.toString() })) });
+    res.json({
+      documents: games.map(doc => ({
+        ...doc,
+        $id: doc._id.toString()
+      }))
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("GET /api/games error:", error);
+    res.status(500).json({
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
-
 app.post('/api/games', async (req, res) => {
   try {
     const data = { ...req.body, created_at: new Date(), updated_at: new Date() };
