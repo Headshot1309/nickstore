@@ -14,12 +14,16 @@ const dbName = 'gaming_store';
 let db;
 
 async function connectDB() {
+  if (db) return db;
+
   try {
     await client.connect();
     db = client.db(dbName);
     console.log('✅ Connected to MongoDB');
+    return db;
   } catch (error) {
     console.error('❌ MongoDB connection error:', error);
+    throw error;
   }
 }
 
