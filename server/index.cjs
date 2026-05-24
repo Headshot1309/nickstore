@@ -56,6 +56,11 @@ app.post('/api/auth/login', async (req, res) => {
 // Games endpoints
 app.get('/api/games', async (req, res) => {
   try {
+    if (!db) {
+  await connectDB();
+}
+
+const games = await db.collection('games').find({}).toArray();
     const games = await db.collection('games').find({}).toArray();
     res.json({
       documents: games.map(doc => ({
