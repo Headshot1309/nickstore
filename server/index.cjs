@@ -593,6 +593,9 @@ app.post('/api/catalog/import-pricelist', async (req, res) => {
     const missingGames = new Set();
     const skippedGames = {};
     let importedProducts = 0;
+    const gamesToActivate = new Map();
+    const productOps = [];
+    const productLookupFilters = [];
 
     for (const product of parsedProducts) {
       const game = gameBySlug.get(product.gameKey);
@@ -614,32 +617,51 @@ app.post('/api/catalog/import-pricelist', async (req, res) => {
 
       if (dryRun) continue;
 
-      const existingProduct = await database.collection('products').findOne({
+      productLookupFilters.push({
         game_id: game._id.toString(),
         supplier_code: product.supplier_code,
       });
+    }
+
+    const existingProducts = dryRun || productLookupFilters.length === 0
+      ? []
+      : await database.collection('products').find({ $or: productLookupFilters }).toArray();
+    const existingProductByKey = new Map(
+      existingProducts.map((product) => [`${product.game_id}:${product.supplier_code}`, product])
+    );
+
+    for (const product of parsedProducts) {
+      const game = gameBySlug.get(product.gameKey);
+      if (!game || skippedGames[product.gameKey]) continue;
+      if (dryRun) continue;
+
+      const gameId = game._id.toString();
+      const existingProduct = existingProductByKey.get(`${gameId}:${product.supplier_code}`);
       const markupPercent = Number(existingProduct?.markup_percent ?? game.markup_percent ?? 0);
       const sellingPrice = applyMarkup(product.price, markupPercent);
 
-      await database.collection('games').updateOne(
-        { _id: game._id },
-        {
-          $set: {
-            is_active: true,
-            provider_slug: product.gameKey,
-            updated_at: now,
+      gamesToActivate.set(gameId, {
+        updateOne: {
+          filter: { _id: game._id },
+          update: {
+            $set: {
+              is_active: true,
+              provider_slug: product.gameKey,
+              updated_at: now,
+            },
           },
-        }
-      );
-
-      await database.collection('products').updateOne(
-        {
-          game_id: game._id.toString(),
-          supplier_code: product.supplier_code,
         },
-        {
-          $set: {
-            game_id: game._id.toString(),
+      });
+
+      productOps.push({
+        updateOne: {
+          filter: {
+            game_id: gameId,
+            supplier_code: product.supplier_code,
+          },
+          update: {
+            $set: {
+              game_id: gameId,
             game_name: game.name,
             name: product.name,
             denomination: product.denomination,
@@ -659,11 +681,19 @@ app.post('/api/catalog/import-pricelist', async (req, res) => {
             updated_at: now,
           },
           $setOnInsert: { created_at: now },
+          },
+          upsert: true,
         },
-        { upsert: true }
-      );
+      });
+    }
 
-      importedProducts += 1;
+    if (!dryRun && gamesToActivate.size > 0) {
+      await database.collection('games').bulkWrite(Array.from(gamesToActivate.values()), { ordered: false });
+    }
+
+    if (!dryRun && productOps.length > 0) {
+      await database.collection('products').bulkWrite(productOps, { ordered: false });
+      importedProducts = productOps.length;
     }
 
     res.json({
