@@ -572,6 +572,10 @@ app.post('/api/catalog/import-pricelist', async (req, res) => {
     const parsedProducts = parseSupplierPricelist(csvText);
     const games = await database.collection('games').find({}).toArray();
     const gameBySlug = new Map();
+    const parsedCountsByGame = parsedProducts.reduce((counts, product) => {
+      counts[product.gameKey] = (counts[product.gameKey] || 0) + 1;
+      return counts;
+    }, {});
 
     for (const game of games) {
       const slugs = [
@@ -587,12 +591,22 @@ app.post('/api/catalog/import-pricelist', async (req, res) => {
 
     const productsByGame = {};
     const missingGames = new Set();
+    const skippedGames = {};
     let importedProducts = 0;
 
     for (const product of parsedProducts) {
       const game = gameBySlug.get(product.gameKey);
       if (!game) {
         missingGames.add(product.gameKey);
+        continue;
+      }
+
+      if (game.service_count && parsedCountsByGame[product.gameKey] > game.service_count) {
+        skippedGames[product.gameKey] = {
+          expected_services: game.service_count,
+          parsed_products: parsedCountsByGame[product.gameKey],
+          reason: 'Parsed product count is higher than provider service count. This usually means the pricelist section contains duplicated or mixed rows.',
+        };
         continue;
       }
 
@@ -659,6 +673,7 @@ app.post('/api/catalog/import-pricelist', async (req, res) => {
       imported_products: dryRun ? 0 : importedProducts,
       games: Object.keys(productsByGame).length,
       products_by_game: productsByGame,
+      skipped_games: skippedGames,
       missing_games: Array.from(missingGames),
       message: dryRun
         ? `Parsed ${parsedProducts.length} supplier products across ${Object.keys(productsByGame).length} matching games.`
