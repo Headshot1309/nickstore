@@ -149,6 +149,24 @@ export const useAdminProducts = () => {
     }
   }, [isAuthenticated, fetchProducts]);
 
+  const applyMarkup = useCallback(async (data: { scope: 'all' | 'game' | 'product'; markup_percent: number; game_id?: string; product_id?: string }) => {
+    if (!isAuthenticated) {
+      throw new Error('You must be logged in to update markup');
+    }
+
+    try {
+      setLoading(true);
+      const result = await productsCollection.applyMarkup(data);
+      await fetchProducts();
+      return result;
+    } catch (err: any) {
+      console.error('[Admin Products] Markup error:', err);
+      throw new Error(err.message || 'Failed to update markup');
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated, fetchProducts]);
+
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
@@ -160,6 +178,7 @@ export const useAdminProducts = () => {
     refresh: fetchProducts, 
     createProduct, 
     updateProduct, 
-    deleteProduct 
+    deleteProduct,
+    applyMarkup,
   };
 };

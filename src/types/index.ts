@@ -4,6 +4,9 @@ export interface Game {
   description: string;
   image_id: string;
   image_url?: string;
+  provider_slug?: string;
+  service_count?: number;
+  markup_percent?: number;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
@@ -16,6 +19,8 @@ export interface Product {
   name: string;
   denomination: string;
   price: number;
+  cost_price?: number;
+  markup_percent?: number;
   original_price?: number;
   supplier_code?: string;
   provider_slug?: string;

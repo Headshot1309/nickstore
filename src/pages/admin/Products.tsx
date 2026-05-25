@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, Search, Filter, DownloadCloud, RefreshCw, PackageCheck, WalletCards, Gamepad2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Filter, DownloadCloud, RefreshCw, PackageCheck, WalletCards, Gamepad2, Percent } from 'lucide-react';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { useAdminProducts } from '@/hooks/useProducts';
 import { useAdminGames } from '@/hooks/useGames';
@@ -40,7 +40,7 @@ import type { Product } from '@/types';
 const Products: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const { products, loading, createProduct, updateProduct, deleteProduct, refresh } = useAdminProducts();
+  const { products, loading, createProduct, updateProduct, deleteProduct, applyMarkup, refresh } = useAdminProducts();
   const { games, loading: gamesLoading } = useAdminGames();
   const [searchQuery, setSearchQuery] = useState('');
   const [gameFilter, setGameFilter] = useState<string>('all');
@@ -52,12 +52,16 @@ const Products: React.FC = () => {
     game_id: '',
     name: '',
     denomination: '',
+    cost_price: '',
+    markup_percent: '',
     price: '',
     original_price: '',
     is_active: true,
   });
   const [submitting, setSubmitting] = useState(false);
   const [importingCatalog, setImportingCatalog] = useState(false);
+  const [bulkMarkup, setBulkMarkup] = useState('');
+  const [applyingMarkup, setApplyingMarkup] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -95,6 +99,8 @@ const Products: React.FC = () => {
         game_id: product.game_id,
         name: product.name,
         denomination: product.denomination,
+        cost_price: (product.cost_price ?? product.market_reference?.observed_price ?? product.price).toString(),
+        markup_percent: (product.markup_percent ?? 0).toString(),
         price: product.price.toString(),
         original_price: product.original_price?.toString() || '',
         is_active: product.is_active,
@@ -105,6 +111,8 @@ const Products: React.FC = () => {
         game_id: games[0]?.$id || '',
         name: '',
         denomination: '',
+        cost_price: '',
+        markup_percent: '',
         price: '',
         original_price: '',
         is_active: true,
@@ -118,13 +126,20 @@ const Products: React.FC = () => {
     setSubmitting(true);
 
     const game = games.find((g) => g.$id === formData.game_id);
+    const costPrice = parseFloat(formData.cost_price || formData.price || '0');
+    const markupPercent = parseFloat(formData.markup_percent || '0');
+    const sellingPrice = formData.markup_percent
+      ? Number((costPrice * (1 + markupPercent / 100)).toFixed(2))
+      : parseFloat(formData.price);
 
     const data = {
       game_id: formData.game_id,
       game_name: game?.name || '',
       name: formData.name,
       denomination: formData.denomination,
-      price: parseFloat(formData.price),
+      cost_price: Number.isFinite(costPrice) ? costPrice : undefined,
+      markup_percent: Number.isFinite(markupPercent) ? markupPercent : undefined,
+      price: sellingPrice,
       original_price: formData.original_price ? parseFloat(formData.original_price) : undefined,
       is_active: formData.is_active,
     };
@@ -176,6 +191,35 @@ const Products: React.FC = () => {
     }
   };
 
+  const handleApplyMarkup = async (scope: 'all' | 'game') => {
+    const markupPercent = parseFloat(bulkMarkup);
+    if (!Number.isFinite(markupPercent) || markupPercent < 0) {
+      alert('Enter a valid markup percent first.');
+      return;
+    }
+
+    if (scope === 'game' && gameFilter === 'all') {
+      alert('Choose one game in the filter first, then apply game markup.');
+      return;
+    }
+
+    setApplyingMarkup(true);
+    try {
+      const result = await applyMarkup({
+        scope,
+        markup_percent: markupPercent,
+        game_id: scope === 'game' ? gameFilter : undefined,
+      });
+      alert(result.message || 'Markup updated.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update markup');
+    } finally {
+      setApplyingMarkup(false);
+    }
+  };
+
+  const getCostPrice = (product: Product) => Number(product.cost_price ?? product.market_reference?.observed_price ?? product.price ?? 0);
+
   const confirmDelete = (product: Product) => {
     setProductToDelete(product);
     setDeleteConfirmOpen(true);
@@ -183,12 +227,6 @@ const Products: React.FC = () => {
 
   const formatCurrency = (amount: number) => {
     return `RM ${amount.toFixed(2)}`;
-  };
-
-  const getReferenceDelta = (product: Product) => {
-    const reference = product.market_reference?.observed_price;
-    if (!reference) return null;
-    return Number(product.price || 0) - reference;
   };
 
   if (!isAuthenticated) return null;
@@ -260,6 +298,50 @@ const Products: React.FC = () => {
             </div>
           </div>
 
+          <div className="mb-6 rounded-2xl border border-violet-400/20 bg-violet-500/10 p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-violet-100">
+                  <Percent className="h-4 w-4" />
+                  <h2 className="font-semibold">Markup controls</h2>
+                </div>
+                <p className="mt-1 text-sm text-slate-400">
+                  Customers only see the final selling price. Supplier cost stays in admin for profit control.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[160px_auto_auto]">
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={bulkMarkup}
+                  onChange={(event) => setBulkMarkup(event.target.value)}
+                  placeholder="Markup %"
+                  className="bg-slate-950/70 border-slate-700 text-white"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleApplyMarkup('game')}
+                  disabled={applyingMarkup || gameFilter === 'all'}
+                  className="border-violet-400/30 bg-violet-400/10 text-violet-100 hover:bg-violet-400/20"
+                >
+                  {applyingMarkup ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Percent className="mr-2 h-4 w-4" />}
+                  Set Filtered Game
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => handleApplyMarkup('all')}
+                  disabled={applyingMarkup}
+                  className="bg-violet-500 text-white hover:bg-violet-600"
+                >
+                  {applyingMarkup ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Percent className="mr-2 h-4 w-4" />}
+                  Set All Products
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {/* Filters */}
           <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/55 p-3">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -318,8 +400,8 @@ const Products: React.FC = () => {
                       <th className="text-left p-4 text-slate-400 font-medium">Game</th>
                       <th className="text-left p-4 text-slate-400 font-medium">Name</th>
                       <th className="text-left p-4 text-slate-400 font-medium">Denomination</th>
-                      <th className="text-left p-4 text-slate-400 font-medium">Price</th>
-                      <th className="text-left p-4 text-slate-400 font-medium">Market Ref</th>
+                      <th className="text-left p-4 text-slate-400 font-medium">Selling Price</th>
+                      <th className="text-left p-4 text-slate-400 font-medium">Cost / Markup</th>
                       <th className="text-left p-4 text-slate-400 font-medium">Status</th>
                       <th className="text-right p-4 text-slate-400 font-medium">Actions</th>
                     </tr>
@@ -341,22 +423,21 @@ const Products: React.FC = () => {
                           )}
                         </td>
                         <td className="p-4">
-                          {product.market_reference ? (
+                          {product.cost_price || product.market_reference ? (
                             <div>
                               <div className="flex items-center gap-2">
                                 <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 text-xs font-medium text-cyan-200">
-                                  {product.market_reference.source}
+                                  Cost {formatCurrency(getCostPrice(product))}
                                 </span>
-                                {getReferenceDelta(product) !== null && (
-                                  <span className={`text-xs ${getReferenceDelta(product)! <= 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
-                                    {getReferenceDelta(product)! <= 0 ? '' : '+'}
-                                    {formatCurrency(getReferenceDelta(product)!)}
+                                {product.markup_percent !== undefined && (
+                                  <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-200">
+                                    +{product.markup_percent}%
                                   </span>
                                 )}
                               </div>
-                              {product.market_reference.observed_price && (
+                              {product.market_reference?.source && (
                                 <p className="mt-1 text-xs text-slate-500">
-                                  Ref {formatCurrency(product.market_reference.observed_price)}
+                                  {product.market_reference.source}
                                 </p>
                               )}
                             </div>
@@ -411,11 +492,11 @@ const Products: React.FC = () => {
                         {product.market_reference && (
                           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                             <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 font-medium text-cyan-200">
-                              {product.market_reference.source}
+                              Cost {formatCurrency(getCostPrice(product))}
                             </span>
-                            {product.market_reference.observed_price && (
-                              <span className="text-slate-500">
-                                Ref {formatCurrency(product.market_reference.observed_price)}
+                            {product.markup_percent !== undefined && (
+                              <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 font-medium text-amber-200">
+                                +{product.markup_percent}%
                               </span>
                             )}
                           </div>
@@ -506,9 +587,46 @@ const Products: React.FC = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="price">Price (RM)</Label>
+                <Label htmlFor="cost_price">Supplier Cost (RM)</Label>
+                <Input
+                  id="cost_price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.cost_price}
+                  onChange={(e) => {
+                    const cost = parseFloat(e.target.value || '0');
+                    const markup = parseFloat(formData.markup_percent || '0');
+                    const price = formData.markup_percent ? (cost * (1 + markup / 100)).toFixed(2) : formData.price;
+                    setFormData({ ...formData, cost_price: e.target.value, price });
+                  }}
+                  placeholder="0.00"
+                  className="bg-slate-900 border-slate-700 text-white"
+                />
+                <p className="text-xs text-slate-500">Admin-only. Customers never see this.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="markup_percent">Markup %</Label>
+                <Input
+                  id="markup_percent"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.markup_percent}
+                  onChange={(e) => {
+                    const cost = parseFloat(formData.cost_price || formData.price || '0');
+                    const markup = parseFloat(e.target.value || '0');
+                    const price = e.target.value ? (cost * (1 + markup / 100)).toFixed(2) : formData.price;
+                    setFormData({ ...formData, markup_percent: e.target.value, price });
+                  }}
+                  placeholder="0"
+                  className="bg-slate-900 border-slate-700 text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="price">Selling / Promo Price (RM)</Label>
                 <Input
                   id="price"
                   type="number"
@@ -520,9 +638,10 @@ const Products: React.FC = () => {
                   className="bg-slate-900 border-slate-700 text-white"
                   required
                 />
+                <p className="text-xs text-slate-500">This is the price customers pay.</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="original_price">Original Price (Optional)</Label>
+                <Label htmlFor="original_price">Old Price for Promo (Optional)</Label>
                 <Input
                   id="original_price"
                   type="number"
@@ -533,6 +652,7 @@ const Products: React.FC = () => {
                   placeholder="0.00"
                   className="bg-slate-900 border-slate-700 text-white"
                 />
+                <p className="text-xs text-slate-500">Shows crossed out next to promo price.</p>
               </div>
             </div>
 

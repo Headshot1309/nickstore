@@ -180,6 +180,8 @@ export const productsCollection = {
   update: async (productId: string, data: any) =>
     mutation(`/api/products/${productId}`, 'PUT', data, () => ({ ...data, $id: productId, updated_at: new Date().toISOString() })),
   delete: async (productId: string) => mutation(`/api/products/${productId}`, 'DELETE', undefined, () => ({ success: true })),
+  applyMarkup: async (data: { scope: 'all' | 'game' | 'product'; markup_percent: number; game_id?: string; product_id?: string }) =>
+    mutation('/api/catalog/markup', 'POST', data, () => ({ success: true, updated_products: 0, message: 'Markup updated.' })),
 };
 
 export const ordersCollection = {

@@ -172,6 +172,15 @@ const parseSupplierPricelist = (csvText) => {
   return Array.from(productsByKey.values());
 };
 
+const applyMarkup = (costPrice, markupPercent = 0) => {
+  const cost = Number(costPrice || 0);
+  const markup = Number(markupPercent || 0);
+  return Number((cost * (1 + markup / 100)).toFixed(2));
+};
+
+const getProductCost = (product) =>
+  Number(product.cost_price ?? product.market_reference?.observed_price ?? product.price ?? 0);
+
 const formatOrderDate = (dateValue) => {
   try {
     return new Date(dateValue || Date.now()).toLocaleString('en-MY', {
@@ -423,7 +432,16 @@ app.get('/api/products', async (req, res) => {
 app.post('/api/products', async (req, res) => {
   try {
     const database = await getDb();
-    const data = { ...req.body, created_at: new Date(), updated_at: new Date() };
+    const costPrice = Number(req.body.cost_price ?? req.body.price ?? 0);
+    const markupPercent = Number(req.body.markup_percent ?? 0);
+    const data = {
+      ...req.body,
+      cost_price: Number.isFinite(costPrice) ? costPrice : undefined,
+      markup_percent: markupPercent,
+      price: req.body.markup_percent !== undefined ? applyMarkup(costPrice, markupPercent) : req.body.price,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
     const result = await database.collection('products').insertOne(data);
     res.json({ ...data, $id: result.insertedId.toString() });
   } catch (error) {
@@ -434,7 +452,15 @@ app.post('/api/products', async (req, res) => {
 app.put('/api/products/:id', async (req, res) => {
   try {
     const database = await getDb();
-    const data = { ...req.body, updated_at: new Date() };
+    const existing = await database.collection('products').findOne({ _id: toObjectId(req.params.id) });
+    const nextCost = Number(req.body.cost_price ?? existing?.cost_price ?? existing?.market_reference?.observed_price ?? req.body.price ?? existing?.price ?? 0);
+    const hasMarkup = req.body.markup_percent !== undefined;
+    const data = {
+      ...req.body,
+      cost_price: Number.isFinite(nextCost) ? nextCost : undefined,
+      price: hasMarkup ? applyMarkup(nextCost, req.body.markup_percent) : req.body.price,
+      updated_at: new Date(),
+    };
     await database.collection('products').updateOne(
       { _id: toObjectId(req.params.id) },
       { $set: data }
@@ -574,6 +600,13 @@ app.post('/api/catalog/import-pricelist', async (req, res) => {
 
       if (dryRun) continue;
 
+      const existingProduct = await database.collection('products').findOne({
+        game_id: game._id.toString(),
+        supplier_code: product.supplier_code,
+      });
+      const markupPercent = Number(existingProduct?.markup_percent ?? game.markup_percent ?? 0);
+      const sellingPrice = applyMarkup(product.price, markupPercent);
+
       await database.collection('games').updateOne(
         { _id: game._id },
         {
@@ -596,7 +629,9 @@ app.post('/api/catalog/import-pricelist', async (req, res) => {
             game_name: game.name,
             name: product.name,
             denomination: product.denomination,
-            price: product.price,
+            cost_price: product.price,
+            markup_percent: markupPercent,
+            price: sellingPrice,
             supplier_code: product.supplier_code,
             provider_slug: product.provider_slug,
             source_page: product.source_page,
@@ -628,6 +663,68 @@ app.post('/api/catalog/import-pricelist', async (req, res) => {
       message: dryRun
         ? `Parsed ${parsedProducts.length} supplier products across ${Object.keys(productsByGame).length} matching games.`
         : `Imported ${importedProducts} supplier products across ${Object.keys(productsByGame).length} games.`,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/catalog/markup', async (req, res) => {
+  try {
+    const database = await getDb();
+    const now = new Date();
+    const scope = req.body?.scope || 'all';
+    const markupPercent = Number(req.body?.markup_percent);
+
+    if (!Number.isFinite(markupPercent) || markupPercent < 0) {
+      return res.status(400).json({ success: false, message: 'Markup percent must be a positive number.' });
+    }
+
+    if (scope === 'game') {
+      if (!req.body?.game_id) {
+        return res.status(400).json({ success: false, message: 'game_id is required for game markup.' });
+      }
+
+      await database.collection('games').updateOne(
+        { _id: toObjectId(req.body.game_id) },
+        { $set: { markup_percent: markupPercent, updated_at: now } }
+      );
+    }
+
+    const query =
+      scope === 'product'
+        ? { _id: toObjectId(req.body.product_id) }
+        : scope === 'game'
+          ? { game_id: req.body.game_id }
+          : {};
+
+    if (scope === 'product' && !req.body?.product_id) {
+      return res.status(400).json({ success: false, message: 'product_id is required for product markup.' });
+    }
+
+    const products = await database.collection('products').find(query).toArray();
+
+    for (const product of products) {
+      const costPrice = getProductCost(product);
+      await database.collection('products').updateOne(
+        { _id: product._id },
+        {
+          $set: {
+            cost_price: costPrice,
+            markup_percent: markupPercent,
+            price: applyMarkup(costPrice, markupPercent),
+            updated_at: now,
+          },
+        }
+      );
+    }
+
+    res.json({
+      success: true,
+      scope,
+      markup_percent: markupPercent,
+      updated_products: products.length,
+      message: `Applied ${markupPercent}% markup to ${products.length} product${products.length === 1 ? '' : 's'}.`,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
