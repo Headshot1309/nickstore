@@ -204,7 +204,7 @@ const GameDetail: React.FC = () => {
 
       {/* Sticky Bottom Bar with animation */}
       {selectedProduct && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800 bg-slate-950/95 p-3 backdrop-blur-xl sm:p-4 animate-slide-up">
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800 bg-slate-950/95 p-3 pb-safe backdrop-blur-xl sm:p-4 animate-slide-up">
           <div className="container mx-auto max-w-4xl">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">

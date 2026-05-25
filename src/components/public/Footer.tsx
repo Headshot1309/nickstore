@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Gamepad2, MessageCircle, Phone } from 'lucide-react';
+import { Clock, Gamepad2, MessageCircle, Phone, ShieldCheck, Zap } from 'lucide-react';
 
 const Footer: React.FC = () => {
   const whatsappNumber = '60197661697';
@@ -9,6 +9,27 @@ const Footer: React.FC = () => {
   return (
     <footer className="border-t border-slate-800 bg-slate-950">
       <div className="container mx-auto px-4 py-12">
+        <div className="mb-10 grid grid-cols-1 gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 p-3 sm:grid-cols-3">
+          {[
+            { icon: Zap, label: 'Fast delivery', text: 'Most top-ups start processing right after payment.' },
+            { icon: ShieldCheck, label: 'Secure checkout', text: 'Payments and order details stay in the API flow.' },
+            { icon: Clock, label: 'Order tracking', text: 'Track your status anytime with your order number.' },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.label} className="flex gap-3 rounded-xl px-3 py-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-300">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">{item.label}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{item.text}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
           <div className="md:col-span-2">
             <Link

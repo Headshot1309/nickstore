@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Gamepad2, Menu, X } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Gamepad2, Menu, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import {
   Sheet,
   SheetContent,
@@ -10,12 +11,18 @@ import {
 
 const Navbar: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
 
   const navLinks = [
     { path: '/', label: 'Home' },
     { path: '/games', label: 'Games' },
     { path: '/track-order', label: 'Track Order' },
   ];
+
+  const isActive = (path: string) => {
+    if (path === '/') return location.pathname === '/';
+    return location.pathname.startsWith(path);
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-800/80 bg-slate-950/82 backdrop-blur-xl supports-[backdrop-filter]:bg-slate-950/70">
@@ -35,7 +42,12 @@ const Navbar: React.FC = () => {
               <Link
                 key={link.path}
                 to={link.path}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800/70 hover:text-white focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-2 focus:ring-offset-slate-950"
+                className={cn(
+                  'rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-2 focus:ring-offset-slate-950',
+                  isActive(link.path)
+                    ? 'bg-violet-500/12 text-white shadow-inner shadow-violet-500/10'
+                    : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                )}
               >
                 {link.label}
               </Link>
@@ -64,12 +76,25 @@ const Navbar: React.FC = () => {
                   </Button>
                 </div>
                 <div className="flex flex-col gap-2 p-4">
+                  <Link
+                    to="/games"
+                    onClick={() => setMobileOpen(false)}
+                    className="mb-2 flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-400"
+                  >
+                    <Search className="h-4 w-4 text-violet-400" />
+                    Search games and top up
+                  </Link>
                   {navLinks.map((link) => (
                     <Link
                       key={link.path}
                       to={link.path}
                       onClick={() => setMobileOpen(false)}
-                      className="rounded-xl px-4 py-3 text-base font-medium text-slate-300 transition-colors hover:bg-slate-800/70 hover:text-white"
+                      className={cn(
+                        'rounded-xl px-4 py-3 text-base font-medium transition-colors',
+                        isActive(link.path)
+                          ? 'bg-violet-500/12 text-white'
+                          : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                      )}
                     >
                       {link.label}
                     </Link>
