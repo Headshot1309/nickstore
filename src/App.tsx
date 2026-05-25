@@ -8,7 +8,6 @@ import InstallPrompt from '@/components/shared/InstallPrompt';
 import Home from '@/pages/public/Home';
 import Games from '@/pages/public/Games';
 import GameDetail from '@/pages/public/GameDetail';
-import GameIdChecker from '@/pages/public/GameIdChecker';
 import OrderForm from '@/pages/public/OrderForm';
 import Payment from '@/pages/public/Payment';
 import OrderStatus from '@/pages/public/OrderStatus';
@@ -53,7 +52,6 @@ function App() {
           {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/games" element={<Games />} />
-          <Route path="/id-checker" element={<GameIdChecker />} />
           <Route path="/game/:gameId" element={<GameDetail />} />
           <Route path="/order" element={<OrderForm />} />
           <Route path="/payment" element={<Payment />} />

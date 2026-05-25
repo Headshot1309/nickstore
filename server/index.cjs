@@ -13,68 +13,6 @@ const dbName = 'gaming_store';
 
 let db;
 
-const idCheckerHost = 'id-game-checker.p.rapidapi.com';
-const idCheckerBaseUrl = `https://${idCheckerHost}`;
-const idCheckerKey = process.env.ID_GAME_CHECKER_API_KEY || process.env.RAPIDAPI_KEY || process.env.RAPID_API_KEY;
-
-const gameSlugAliases = {
-  'mobile legends': 'mobile-legends',
-  'mobile legends bang bang': 'mobile-legends',
-  'mobile legends: bang bang': 'mobile-legends',
-  mlbb: 'mobile-legends',
-  'free fire': 'free-fire',
-  ff: 'free-fire',
-  'pubg mobile': 'pubg-mobile',
-  pubg: 'pubg-mobile',
-  'genshin impact': 'genshin-impact',
-  'honkai star rail': 'honkai-star-rail',
-  'call of duty mobile': 'call-of-duty-mobile',
-  codm: 'call-of-duty-mobile',
-  'clash of clans': 'clash-of-clans',
-  coc: 'clash-of-clans',
-  'clash royale': 'clash-royale',
-  'brawl stars': 'brawl-stars',
-};
-
-const normalizeGameSlug = (game) => {
-  const value = String(game || '').trim().toLowerCase();
-  if (!value) return '';
-
-  return gameSlugAliases[value] || value
-    .replace(/['"]/g, '')
-    .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-};
-
-const normalizeCheckerResponse = (payload, game, userId) => {
-  const data = payload && typeof payload === 'object' ? payload.data : null;
-  const username = String(
-    data?.username ||
-    payload?.username ||
-    payload?.name ||
-    ''
-  ).trim();
-
-  const status = Number(payload?.status || 0);
-  const success = Boolean(
-    username ||
-    payload?.success === true ||
-    (payload?.error === false && status >= 200 && status < 300 && status !== 204)
-  );
-
-  return {
-    success,
-    game,
-    userId,
-    username,
-    avatar: data?.avatar || payload?.avatar || '',
-    status: status || (success ? 200 : 404),
-    message: payload?.msg || payload?.message || (success ? 'id_found' : 'id_not_found'),
-    raw: payload,
-  };
-};
-
 async function connectDB() {
   if (db) return db;
 
@@ -171,60 +109,6 @@ app.delete('/api/games/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/check-game-id', async (req, res) => {
-  try {
-    const { game, userId, region } = req.body || {};
-    const gameSlug = normalizeGameSlug(game);
-    const cleanUserId = String(userId || '').trim().replace(/^#/, '');
-    const cleanRegion = String(region || '').trim();
-
-    if (!gameSlug || !cleanUserId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Game and user ID are required',
-      });
-    }
-
-    if (!idCheckerKey) {
-      return res.status(503).json({
-        success: false,
-        message: 'ID checker API key is not configured',
-      });
-    }
-
-    const pathParts = [gameSlug, cleanUserId];
-    if (cleanRegion) pathParts.push(cleanRegion);
-
-    const url = `${idCheckerBaseUrl}/${pathParts.map(encodeURIComponent).join('/')}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'X-Rapidapi-Host': idCheckerHost,
-        'X-Rapidapi-Key': idCheckerKey,
-      },
-    });
-
-    const text = await response.text();
-    let payload;
-
-    try {
-      payload = text ? JSON.parse(text) : {};
-    } catch {
-      payload = { message: text };
-    }
-
-    const result = normalizeCheckerResponse(payload, gameSlug, cleanUserId);
-
-    res.status(response.ok || result.success ? 200 : response.status).json(result);
-  } catch (error) {
-    console.error('POST /api/check-game-id error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to check game ID',
-    });
   }
 });
 
