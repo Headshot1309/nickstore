@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, Search, Filter } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Filter, DownloadCloud, RefreshCw, PackageCheck, WalletCards, Gamepad2 } from 'lucide-react';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { useAdminProducts } from '@/hooks/useProducts';
 import { useAdminGames } from '@/hooks/useGames';
@@ -40,7 +40,7 @@ import type { Product } from '@/types';
 const Products: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const { products, loading, createProduct, updateProduct, deleteProduct } = useAdminProducts();
+  const { products, loading, createProduct, updateProduct, deleteProduct, refresh } = useAdminProducts();
   const { games, loading: gamesLoading } = useAdminGames();
   const [searchQuery, setSearchQuery] = useState('');
   const [gameFilter, setGameFilter] = useState<string>('all');
@@ -57,6 +57,7 @@ const Products: React.FC = () => {
     is_active: true,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [importingCatalog, setImportingCatalog] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -81,6 +82,11 @@ const Products: React.FC = () => {
 
     return matchesSearch && matchesGame;
   });
+
+  const activeProducts = products.filter((product) => product.is_active).length;
+  const averagePrice = products.length > 0
+    ? products.reduce((sum, product) => sum + Number(product.price || 0), 0) / products.length
+    : 0;
 
   const handleOpenModal = (product?: Product) => {
     if (product) {
@@ -151,6 +157,25 @@ const Products: React.FC = () => {
     }
   };
 
+  const handleImportMarketCatalog = async () => {
+    setImportingCatalog(true);
+    try {
+      const response = await fetch('/api/catalog/seed-market', { method: 'POST' });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to import catalog');
+      }
+
+      alert(data.message || 'Catalog imported.');
+      await refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to import catalog');
+    } finally {
+      setImportingCatalog(false);
+    }
+  };
+
   const confirmDelete = (product: Product) => {
     setProductToDelete(product);
     setDeleteConfirmOpen(true);
@@ -165,31 +190,73 @@ const Products: React.FC = () => {
   const isLoading = loading || gamesLoading;
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       <AdminSidebar />
 
       <main className="lg:ml-64 min-h-screen">
         <div className="h-16 lg:hidden" />
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div className="mb-6 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/65 shadow-xl shadow-black/20">
+            <div className="h-1 bg-gradient-to-r from-amber-400 via-violet-400 to-cyan-400" />
+            <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
             <div>
-              <h1 className="text-2xl font-bold text-white">Products</h1>
-              <p className="text-slate-400 mt-1">Manage game denominations and pricing</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-300">Catalog control</p>
+              <h1 className="mt-2 text-2xl font-bold text-white">Products</h1>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
+                Manage denominations, MYR pricing, and active storefront packages from one fast mobile-friendly view.
+              </p>
             </div>
-            <Button
-              onClick={() => handleOpenModal()}
-              className="bg-violet-500 hover:bg-violet-600 text-white"
-              disabled={games.length === 0}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Product
-            </Button>
+            <div className="grid grid-cols-1 gap-2 sm:flex">
+              <Button
+                onClick={handleImportMarketCatalog}
+                variant="outline"
+                className="border-cyan-400/40 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/20"
+                disabled={importingCatalog}
+              >
+                {importingCatalog ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <DownloadCloud className="mr-2 h-4 w-4" />}
+                Import MYR Catalog
+              </Button>
+              <Button
+                onClick={() => handleOpenModal()}
+                className="bg-violet-500 hover:bg-violet-600 text-white"
+                disabled={games.length === 0}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Product
+              </Button>
+            </div>
+            </div>
+          </div>
+
+          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-400">Total products</span>
+                <PackageCheck className="h-5 w-5 text-violet-300" />
+              </div>
+              <p className="mt-2 text-2xl font-bold text-white">{products.length}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-400">Active storefront</span>
+                <Gamepad2 className="h-5 w-5 text-emerald-300" />
+              </div>
+              <p className="mt-2 text-2xl font-bold text-white">{activeProducts}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-400">Average price</span>
+                <WalletCards className="h-5 w-5 text-cyan-300" />
+              </div>
+              <p className="mt-2 text-2xl font-bold text-white">{formatCurrency(averagePrice)}</p>
+            </div>
           </div>
 
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/55 p-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
               <Input
@@ -214,6 +281,7 @@ const Products: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
+          </div>
 
           {/* Products Table */}
           {isLoading ? (
@@ -236,8 +304,8 @@ const Products: React.FC = () => {
               }
             />
           ) : (
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
+            <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 shadow-xl shadow-black/15">
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-slate-800">
@@ -300,6 +368,42 @@ const Products: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="grid gap-3 p-3 md:hidden">
+                {filteredProducts.map((product) => (
+                  <div key={product.$id} className="rounded-2xl border border-slate-800 bg-slate-950/45 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs text-slate-500">{product.game_name}</p>
+                        <h3 className="mt-1 truncate font-semibold text-white">{product.name}</h3>
+                        <p className="mt-1 text-sm text-slate-400">{product.denomination}</p>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${
+                          product.is_active ? 'bg-emerald-500/10 text-emerald-300' : 'bg-slate-500/10 text-slate-400'
+                        }`}
+                      >
+                        {product.is_active ? 'Active' : 'Off'}
+                      </span>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-lg font-bold text-violet-300">{formatCurrency(product.price)}</p>
+                        {product.original_price && (
+                          <p className="text-xs text-slate-500 line-through">{formatCurrency(product.original_price)}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white" onClick={() => handleOpenModal(product)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-slate-400 hover:text-red-400" onClick={() => confirmDelete(product)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

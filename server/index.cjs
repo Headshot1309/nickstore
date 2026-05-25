@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { Blob } = require('buffer');
 const { MongoClient, ObjectId } = require('mongodb');
 const nodemailer = require('nodemailer');
+const { marketCatalogGames, marketCatalogProducts } = require('./catalog-seed.cjs');
 const app = express();
 const port = 3001;
 
@@ -374,6 +375,79 @@ app.delete('/api/products/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/catalog/seed-market', async (_req, res) => {
+  try {
+    const database = await getDb();
+    const now = new Date();
+    const gameIdsByKey = {};
+    let gamesUpserted = 0;
+    let productsUpserted = 0;
+
+    for (const game of marketCatalogGames) {
+      const result = await database.collection('games').findOneAndUpdate(
+        { name: game.name },
+        {
+          $set: {
+            name: game.name,
+            description: game.description,
+            image_id: '',
+            image_url: game.image_url,
+            is_active: true,
+            updated_at: now,
+          },
+          $setOnInsert: { created_at: now },
+        },
+        { upsert: true, returnDocument: 'after' }
+      );
+
+      gameIdsByKey[game.key] = result._id.toString();
+      gamesUpserted += 1;
+    }
+
+    const gamesByKey = Object.fromEntries(marketCatalogGames.map((game) => [game.key, game]));
+
+    for (const product of marketCatalogProducts) {
+      const game = gamesByKey[product.gameKey];
+      const gameId = gameIdsByKey[product.gameKey];
+      if (!game || !gameId) continue;
+
+      await database.collection('products').updateOne(
+        {
+          game_id: gameId,
+          name: product.name,
+          denomination: product.denomination,
+        },
+        {
+          $set: {
+            game_id: gameId,
+            game_name: game.name,
+            name: product.name,
+            denomination: product.denomination,
+            price: product.price,
+            original_price: product.original_price,
+            description: 'MYR starter catalog item. Review pricing before running promotions.',
+            is_active: true,
+            updated_at: now,
+          },
+          $setOnInsert: { created_at: now },
+        },
+        { upsert: true }
+      );
+
+      productsUpserted += 1;
+    }
+
+    res.json({
+      success: true,
+      games: gamesUpserted,
+      products: productsUpserted,
+      message: `Imported ${gamesUpserted} games and ${productsUpserted} MYR products.`,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
