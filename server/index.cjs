@@ -396,6 +396,8 @@ app.post('/api/catalog/seed-market', async (_req, res) => {
             description: game.description,
             image_id: '',
             image_url: game.image_url,
+            provider_slug: game.provider_slug,
+            service_count: game.service_count,
             is_active: game.is_active ?? pricedGameKeys.has(game.key),
             updated_at: now,
           },

@@ -1,4 +1,4 @@
-const marketCatalogGames = [
+const baseMarketCatalogGames = [
   {
     key: 'mobile-legends',
     name: 'Mobile Legends',
@@ -492,6 +492,54 @@ const marketCatalogGames = [
     image_url: 'https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?auto=format&fit=crop&w=900&q=80',
   },
 ];
+
+const providerGameCatalog = [
+  ['arena-breakout', 'Arena Breakout', 12, 'Arena Breakout Bonds and currency services.'],
+  ['dragon-nest-m-sea', 'Dragon Nest M : Sea', 11, 'SEA-region Dragon Nest M top-up services.'],
+  ['eggy-party', 'Eggy Party', 12, 'Eggy Coins and Eggy Party recharge services.'],
+  ['free-fire-instant', 'Free Fire Instant', 109, 'Instant Free Fire diamond and membership services.'],
+  ['free-fire-promo', 'Free Fire Promo', 30, 'Promotional Free Fire diamond and membership services.'],
+  ['garena-blood-strike', 'Garena Blood Strike', 6, 'Garena Blood Strike Gold services.'],
+  ['garena-delta-force-id', 'Garena Delta Force ID', 14, 'Indonesia-region Garena Delta Force services.'],
+  ['garena-free-fire-global', 'Garena Free Fire Global', 18, 'Global Free Fire diamond and membership services.'],
+  ['genshin-impact', 'Genshin Impact', 55, 'Genesis Crystals, Blessing, and Genshin Impact services.'],
+  ['honkai-star-rail', 'Honkai Star: Rail', 21, 'Oneiric Shards and Express Supply Pass services.'],
+  ['honor-of-kings', 'Honor of Kings', 10, 'Honor of Kings token and voucher services.'],
+  ['life-after-credits', 'Life After Credits', 8, 'Life After credit recharge services.'],
+  ['magic-chess-go-go', 'Magic Chess: Go Go', 19, 'Magic Chess passes and currency services.'],
+  ['marvel-rivals', 'Marvel Rivals', 6, 'Marvel Rivals Lattice services.'],
+  ['mobile-legends-br', 'Mobile Legends BR', 18, 'Brazil-region Mobile Legends diamond services.'],
+  ['mlbr', 'Mobile Legends Brazil', 23, 'Brazil-region Mobile Legends diamond services.'],
+  ['mobile-legends-gift', 'Mobile Legends Gift', 2, 'Mobile Legends gift services.'],
+  ['mlgb', 'Mobile Legends Global', 37, 'Global Mobile Legends diamond services.'],
+  ['mlid', 'Mobile Legends ID', 36, 'Indonesia-region Mobile Legends diamond services.'],
+  ['mlidpromo', 'Mobile Legends ID Promo', 39, 'Promotional Indonesia-region Mobile Legends diamond services.'],
+  ['mlmy', 'Mobile Legends MY', 32, 'Malaysia-region Mobile Legends diamond services.'],
+  ['mlph', 'Mobile Legends PH', 17, 'Philippines-region Mobile Legends diamond services.'],
+  ['mlsg', 'Mobile Legends SG', 20, 'Singapore-region Mobile Legends diamond services.'],
+  ['mlturkey', 'Mobile Legends Turkey', 10, 'Turkey-region Mobile Legends diamond services.'],
+  ['mlvilog', 'Mobile Legends Via Login', 1, 'Mobile Legends via-login service.'],
+  ['pbid', 'Point Blank ID', 7, 'Indonesia-region Point Blank top-up services.'],
+  ['pubgg', 'PUBG Global', 6, 'Global PUBG Mobile UC services.'],
+  ['pubgid', 'PUBG Indonesia', 6, 'Indonesia-region PUBG Mobile UC services.'],
+  ['robuxvilog', 'Roblox Via Login', 19, 'Roblox via-login Robux services.'],
+  ['token-listrik', 'Token Listrik', 4, 'Token Listrik prepaid services.'],
+  ['valo', 'Valorant', 18, 'Valorant Points and voucher services.'],
+  ['where-winds-meet', 'Where Winds Meet', 12, 'Where Winds Meet currency services.'],
+  ['wuwa', 'Wuthering Waves', 7, 'Wuthering Waves Lunites and subscription services.'],
+  ['zzz', 'Zenless Zone Zero', 7, 'Zenless Zone Zero Monochrome services.'],
+].map(([key, name, services, summary]) => ({
+  key,
+  name,
+  description: `${summary} Provider slug: ${key}. Services: ${services}.`,
+  image_url: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=900&q=80',
+  provider_slug: key,
+  service_count: services,
+}));
+
+const marketCatalogGames = Array.from(
+  new Map([...baseMarketCatalogGames, ...providerGameCatalog].map((game) => [game.key, game])).values()
+);
 
 const sources = {
   gamejusMlbb: 'https://gamejus.com/product/UID/mobile-legends-bang-bang-MY',
