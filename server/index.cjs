@@ -10,6 +10,7 @@ const port = 3001;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+app.use(express.text({ type: ['text/*', 'application/csv'], limit: '10mb' }));
 
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
@@ -93,6 +94,82 @@ const escapeTelegramHtml = (value) =>
 const formatCurrency = (amount) => {
   const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
   return `RM ${(numericAmount || 0).toFixed(2)}`;
+};
+
+const normalizeCatalogSlug = (value = '') =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const parseCsvLine = (line) => {
+  const cells = [];
+  let current = '';
+  let quoted = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    const next = line[i + 1];
+
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      i += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === ',' && !quoted) {
+      cells.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  cells.push(current.trim());
+  return cells;
+};
+
+const parseSupplierPricelist = (csvText) => {
+  const rows = String(csvText || '')
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const productsByKey = new Map();
+
+  for (const row of rows) {
+    if (/^game,page,no,item,price rm,code$/i.test(row)) continue;
+
+    const [gameRaw, page, no, item, priceRaw, code] = parseCsvLine(row);
+    let gameKey = normalizeCatalogSlug(gameRaw);
+    const price = Number.parseFloat(String(priceRaw || '').replace(/[^\d.]/g, ''));
+    const supplierCode = String(code || '').trim();
+
+    if (!gameKey || !item || !Number.isFinite(price) || !supplierCode) continue;
+
+    if (gameKey === 'valo') {
+      if (/^VPID/i.test(supplierCode)) {
+        gameKey = 'valorant-id';
+      } else if (/^VPMY/i.test(supplierCode)) {
+        gameKey = 'valorant-my';
+      }
+    }
+
+    productsByKey.set(`${gameKey}:${supplierCode}`, {
+      gameKey,
+      name: item.trim(),
+      denomination: item.trim(),
+      price,
+      supplier_code: supplierCode,
+      provider_slug: gameKey,
+      source_page: page || '',
+      sort_order: Number.parseInt(no, 10) || 0,
+    });
+  }
+
+  return Array.from(productsByKey.values());
 };
 
 const formatOrderDate = (dateValue) => {
@@ -449,6 +526,108 @@ app.post('/api/catalog/seed-market', async (_req, res) => {
       games: gamesUpserted,
       products: productsUpserted,
       message: `Imported ${gamesUpserted} games and ${productsUpserted} MYR products.`,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/catalog/import-pricelist', async (req, res) => {
+  try {
+    const csvText = typeof req.body === 'string' ? req.body : req.body?.csv;
+    const dryRun = req.query.dry_run === 'true';
+
+    if (!csvText) {
+      return res.status(400).json({ success: false, message: 'CSV pricelist text is required.' });
+    }
+
+    const database = await getDb();
+    const now = new Date();
+    const parsedProducts = parseSupplierPricelist(csvText);
+    const games = await database.collection('games').find({}).toArray();
+    const gameBySlug = new Map();
+
+    for (const game of games) {
+      const slugs = [
+        game.provider_slug,
+        normalizeCatalogSlug(game.name),
+        normalizeCatalogSlug(game.name?.replace(/:/g, '')),
+      ].filter(Boolean);
+
+      for (const slug of slugs) {
+        if (!gameBySlug.has(slug)) gameBySlug.set(slug, game);
+      }
+    }
+
+    const productsByGame = {};
+    const missingGames = new Set();
+    let importedProducts = 0;
+
+    for (const product of parsedProducts) {
+      const game = gameBySlug.get(product.gameKey);
+      if (!game) {
+        missingGames.add(product.gameKey);
+        continue;
+      }
+
+      productsByGame[product.gameKey] = (productsByGame[product.gameKey] || 0) + 1;
+
+      if (dryRun) continue;
+
+      await database.collection('games').updateOne(
+        { _id: game._id },
+        {
+          $set: {
+            is_active: true,
+            provider_slug: product.gameKey,
+            updated_at: now,
+          },
+        }
+      );
+
+      await database.collection('products').updateOne(
+        {
+          game_id: game._id.toString(),
+          supplier_code: product.supplier_code,
+        },
+        {
+          $set: {
+            game_id: game._id.toString(),
+            game_name: game.name,
+            name: product.name,
+            denomination: product.denomination,
+            price: product.price,
+            supplier_code: product.supplier_code,
+            provider_slug: product.provider_slug,
+            source_page: product.source_page,
+            market_reference: {
+              source: 'Topup_Kryz_bot',
+              observed_price: product.price,
+              checked_at: '2026-05-26',
+            },
+            description: `Supplier code ${product.supplier_code}. Imported from Topup_Kryz_bot pricelist.`,
+            is_active: true,
+            updated_at: now,
+          },
+          $setOnInsert: { created_at: now },
+        },
+        { upsert: true }
+      );
+
+      importedProducts += 1;
+    }
+
+    res.json({
+      success: true,
+      dry_run: dryRun,
+      parsed_products: parsedProducts.length,
+      imported_products: dryRun ? 0 : importedProducts,
+      games: Object.keys(productsByGame).length,
+      products_by_game: productsByGame,
+      missing_games: Array.from(missingGames),
+      message: dryRun
+        ? `Parsed ${parsedProducts.length} supplier products across ${Object.keys(productsByGame).length} matching games.`
+        : `Imported ${importedProducts} supplier products across ${Object.keys(productsByGame).length} games.`,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

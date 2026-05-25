@@ -17,6 +17,9 @@ export interface Product {
   denomination: string;
   price: number;
   original_price?: number;
+  supplier_code?: string;
+  provider_slug?: string;
+  source_page?: string;
   market_reference?: {
     source: string;
     source_url?: string;

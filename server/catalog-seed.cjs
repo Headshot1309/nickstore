@@ -525,6 +525,8 @@ const providerGameCatalog = [
   ['robuxvilog', 'Roblox Via Login', 19, 'Roblox via-login Robux services.'],
   ['token-listrik', 'Token Listrik', 4, 'Token Listrik prepaid services.'],
   ['valo', 'Valorant', 18, 'Valorant Points and voucher services.'],
+  ['valorant-id', 'Valorant ID', 6, 'Indonesia-region Valorant Points services.'],
+  ['valorant-my', 'Valorant MY', 12, 'Malaysia-region Valorant Points services.'],
   ['where-winds-meet', 'Where Winds Meet', 12, 'Where Winds Meet currency services.'],
   ['wuwa', 'Wuthering Waves', 7, 'Wuthering Waves Lunites and subscription services.'],
   ['zzz', 'Zenless Zone Zero', 7, 'Zenless Zone Zero Monochrome services.'],
