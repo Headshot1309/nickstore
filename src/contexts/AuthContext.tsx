@@ -11,7 +11,8 @@ interface AuthContextType {
   user: AdminUser | null;
   isAuthenticated: boolean;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<{ requires2fa?: boolean; challengeId?: string; message?: string } | void>;
+  verifyLoginCode: (challengeId: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -27,7 +28,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const currentUser = await account.get();
       console.log('✅ User is authenticated:', currentUser.email);
       setUser(currentUser as AdminUser);
-    } catch (error) {
+    } catch {
       console.log('❌ No session found');
       setUser(null);
     } finally {
@@ -43,13 +44,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     try {
       console.log('🔐 Attempting login for:', email);
-      await account.createEmailPasswordSession(email, password);
+      const sessionResult = await account.createEmailPasswordSession(email, password);
+      if ('requires2fa' in sessionResult) {
+        return sessionResult;
+      }
       const currentUser = await account.get();
       console.log('✅ Login successful! User:', currentUser.email);
       setUser(currentUser as AdminUser);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Login failed:', error);
-      throw new Error(error.message || 'Login failed');
+      throw new Error(error instanceof Error ? error.message : 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyLoginCode = async (challengeId: string, code: string) => {
+    setLoading(true);
+    try {
+      await account.verifyEmailCode(challengeId, code);
+      const currentUser = await account.get();
+      setUser(currentUser as AdminUser);
+    } catch (error: unknown) {
+      console.error('Verification failed:', error);
+      throw new Error(error instanceof Error ? error.message : 'Verification failed');
     } finally {
       setLoading(false);
     }
@@ -75,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!user,
         loading,
         login,
+        verifyLoginCode,
         logout,
       }}
     >

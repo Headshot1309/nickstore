@@ -24,9 +24,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   onClose,
   onUpdateStatus,
 }) => {
-  if (!order) return null;
-
   const [copied, setCopied] = React.useState(false);
+
+  if (!order) return null;
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
@@ -47,6 +47,22 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   const copyOrderNumber = () => {
     navigator.clipboard.writeText(order.order_number);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const buildSupplierOrder = () => [
+    `Order: ${order.order_number}`,
+    `Game: ${order.game_name}`,
+    `Product: ${order.product_name}`,
+    order.user_game_id ? `Game ID: ${order.user_game_id}` : '',
+    order.user_game_server ? `Server: ${order.user_game_server}` : '',
+    order.user_nickname ? `Nickname: ${order.user_nickname}` : '',
+    `Amount: ${formatCurrency(order.total_amount)}`,
+  ].filter(Boolean).join('\n');
+
+  const copySupplierOrder = async () => {
+    await navigator.clipboard.writeText(buildSupplierOrder());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -181,6 +197,24 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 <p className="text-2xl font-bold text-violet-400">{formatCurrency(order.total_amount)}</p>
               </div>
             </div>
+
+            {order.receipt_validation && (
+              <div className={`mt-4 rounded-xl border p-4 text-sm ${
+                order.receipt_validation.accepted
+                  ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+                  : 'border-red-400/20 bg-red-400/10 text-red-100'
+              }`}>
+                <p className="font-medium">{order.receipt_validation.message}</p>
+                <div className="mt-2 grid grid-cols-1 gap-1 text-xs opacity-85 sm:grid-cols-2">
+                  <span>Recipient: {order.receipt_validation.recipientMatched ? 'Matched' : 'Not matched'}</span>
+                  <span>Time: {order.receipt_validation.timeMatched ? 'Within 5 minutes' : 'Outside window'}</span>
+                  <span>Amount: {order.receipt_validation.amountMatched ? 'Matched' : 'Not matched'}</span>
+                  {order.receipt_validation.detectedAmount !== undefined && (
+                    <span>Detected: RM {order.receipt_validation.detectedAmount.toFixed(2)}</span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Receipt Image */}
@@ -251,6 +285,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 Contact Customer
               </Button>
             </a>
+            <Button
+              variant="outline"
+              className="flex-1 gap-2 border-cyan-500 text-cyan-300 hover:bg-cyan-500/10 transition-all duration-300 hover:scale-105"
+              onClick={copySupplierOrder}
+            >
+              <Copy className="w-4 h-4" />
+              Copy Supplier Order
+            </Button>
           </div>
         </div>
       </DialogContent>

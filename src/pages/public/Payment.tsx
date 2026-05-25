@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, Clock3, MessageCircle, ShieldCheck, Upload, WalletCards } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, Clock3, MessageCircle, ShieldCheck, Upload, WalletCards, XCircle } from 'lucide-react';
 import Navbar from '@/components/public/Navbar';
 import Footer from '@/components/public/Footer';
 import { PaymentMethodCard } from '@/components/public/PaymentMethodCard';
@@ -11,6 +11,13 @@ import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import type { PaymentMethod } from '@/types';
+import type { ReceiptValidationResult } from '@/lib/receiptValidation';
+
+type ReceiptCheckState = {
+  status: 'idle' | 'checking' | 'valid' | 'invalid';
+  result?: ReceiptValidationResult;
+  error?: string;
+};
 
 const Payment: React.FC = () => {
   const location = useLocation();
@@ -22,6 +29,7 @@ const Payment: React.FC = () => {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string>('');
+  const [receiptCheck, setReceiptCheck] = useState<ReceiptCheckState>({ status: 'idle' });
   const [error, setError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -35,22 +43,51 @@ const Payment: React.FC = () => {
   const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        alert('File size must be less than 5MB');
+      if (file.size > 2 * 1024 * 1024) {
+        alert('File size must be less than 2MB');
         return;
       }
       setReceiptFile(file);
+      setReceiptCheck({ status: 'checking' });
       const reader = new FileReader();
       reader.onloadend = () => {
         setReceiptPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+
+      import('@/lib/receiptValidation')
+        .then(({ validateReceiptImage }) => validateReceiptImage(file, Number(product.price || 0)))
+        .then((result) => {
+          setReceiptCheck({ status: result.accepted ? 'valid' : 'invalid', result });
+        })
+        .catch((validationError) => {
+          console.error('Receipt validation failed:', validationError);
+          setReceiptCheck({
+            status: 'invalid',
+            error: 'Could not read this receipt. Please upload a clearer screenshot.',
+          });
+        });
     }
   };
 
   const handleSubmit = async () => {
     if (!selectedMethod) {
       setError('Please select a payment method');
+      return;
+    }
+
+    if (!receiptFile) {
+      setError('Please upload your payment receipt');
+      return;
+    }
+
+    if (receiptCheck.status === 'checking') {
+      setError('Please wait while the receipt is being checked');
+      return;
+    }
+
+    if (receiptCheck.status !== 'valid' || !receiptCheck.result?.accepted) {
+      setError(receiptCheck.result?.message || receiptCheck.error || 'Receipt must be accepted before placing the order');
       return;
     }
 
@@ -75,6 +112,18 @@ const Payment: React.FC = () => {
       user_phone: userDetails.userPhone || '',
       payment_method_id: selectedMethod.$id,
       payment_method_name: selectedMethod.name,
+      receipt_validation: {
+        accepted: receiptCheck.result.accepted,
+        recipientMatched: receiptCheck.result.recipientMatched,
+        timeMatched: receiptCheck.result.timeMatched,
+        amountMatched: receiptCheck.result.amountMatched,
+        detectedAmount: receiptCheck.result.detectedAmount,
+        expectedAmount: receiptCheck.result.expectedAmount,
+        detectedReceiptTime: receiptCheck.result.detectedReceiptTime,
+        minutesDifference: receiptCheck.result.minutesDifference,
+        message: receiptCheck.result.message,
+        checked_at: new Date().toISOString(),
+      },
     };
 
     try {
@@ -230,6 +279,7 @@ const Payment: React.FC = () => {
                       onClick={() => {
                         setReceiptPreview('');
                         setReceiptFile(null);
+                        setReceiptCheck({ status: 'idle' });
                       }}
                       className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
                       aria-label="Remove receipt preview"
@@ -241,7 +291,7 @@ const Payment: React.FC = () => {
                   <label className="flex h-40 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700 px-4 text-center transition-colors hover:border-violet-500 hover:bg-slate-800/30">
                     <Upload className="w-10 h-10 text-slate-500 mb-2" />
                     <span className="text-slate-300">Click to upload receipt</span>
-                    <span className="text-slate-500 text-sm mt-1">JPG, PNG up to 5MB</span>
+                    <span className="text-slate-500 text-sm mt-1">JPG, PNG up to 2MB</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -250,11 +300,39 @@ const Payment: React.FC = () => {
                     />
                   </label>
                 )}
+
+                {receiptCheck.status !== 'idle' && (
+                  <div className={`mt-4 rounded-2xl border p-4 text-sm ${
+                    receiptCheck.status === 'valid'
+                      ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+                      : receiptCheck.status === 'checking'
+                        ? 'border-cyan-400/20 bg-cyan-400/10 text-cyan-100'
+                        : 'border-red-400/20 bg-red-400/10 text-red-100'
+                  }`}>
+                    <div className="flex items-start gap-3">
+                      {receiptCheck.status === 'checking' && <LoadingSpinner size="sm" className="mt-0.5 text-cyan-200" />}
+                      {receiptCheck.status === 'valid' && <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />}
+                      {receiptCheck.status === 'invalid' && <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-300" />}
+                      <div>
+                        <p className="font-medium">
+                          {receiptCheck.status === 'checking'
+                            ? 'Checking receipt...'
+                            : receiptCheck.result?.message || receiptCheck.error}
+                        </p>
+                        {receiptCheck.status === 'invalid' && (
+                          <p className="mt-1 text-xs opacity-85">
+                            The receipt must show Muhammad Firdaus, a payment time within the last 5 minutes, and the exact order total.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <Button
                 onClick={handleSubmit}
-                disabled={!selectedMethod || creatingOrder || isSubmitting}
+                disabled={!selectedMethod || creatingOrder || isSubmitting || receiptCheck.status === 'checking'}
                 className="h-12 w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 py-6 text-white shadow-lg shadow-violet-950/25 transition-transform hover:scale-[1.01] hover:from-violet-600 hover:to-fuchsia-600"
               >
                 {(creatingOrder || isSubmitting) ? (
@@ -269,6 +347,10 @@ const Payment: React.FC = () => {
                   </>
                 )}
               </Button>
+              <div className="flex items-start gap-2 rounded-2xl border border-slate-800 bg-slate-900/55 p-4 text-xs leading-5 text-slate-400">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                Receipt checking uses OCR and can make mistakes on blurry screenshots. Admin still sees the uploaded receipt and validation result.
+              </div>
             </div>
 
             {/* Order Summary */}

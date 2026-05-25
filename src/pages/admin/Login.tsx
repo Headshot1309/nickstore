@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Gamepad2, Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { Gamepad2, Eye, EyeOff, KeyRound, Lock, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,9 +10,12 @@ import { account } from '@/lib/mongodb'; // Updated import
 // Rest of the file remains the same
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuth();
+  const { login, verifyLoginCode, isAuthenticated } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [challengeId, setChallengeId] = useState('');
+  const [requires2fa, setRequires2fa] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,7 +29,7 @@ const Login: React.FC = () => {
         if (user) {
           navigate('/admin');
         }
-      } catch (error) {
+      } catch {
         console.log('Not logged in');
       }
     };
@@ -47,12 +50,24 @@ const Login: React.FC = () => {
 
     try {
       console.log('Submitting login for:', email);
-      await login(email, password);
+      if (requires2fa) {
+        await verifyLoginCode(challengeId, verificationCode);
+        navigate('/admin');
+        return;
+      }
+
+      const loginResult = await login(email, password);
+      if (loginResult?.requires2fa && loginResult.challengeId) {
+        setRequires2fa(true);
+        setChallengeId(loginResult.challengeId);
+        setError('');
+        return;
+      }
       console.log('Login successful, redirecting...');
       navigate('/admin');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Login error in component:', err);
-      setError(err.message || 'Invalid email or password');
+      setError(err instanceof Error ? err.message : 'Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -97,36 +112,68 @@ const Login: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-slate-300">Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="pl-10 pr-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
-                  required
-                  autoComplete="current-password"
-                />
+            {!requires2fa ? (
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-slate-300">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="pl-10 pr-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
+                    required
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="verification-code" className="text-slate-300">Email Verification Code</Label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                  <Input
+                    id="verification-code"
+                    type="text"
+                    inputMode="numeric"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Enter 6-digit code"
+                    className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
+                    required
+                    autoComplete="one-time-code"
+                  />
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
+                  onClick={() => {
+                    setRequires2fa(false);
+                    setChallengeId('');
+                    setVerificationCode('');
+                    setPassword('');
+                  }}
+                  className="text-xs text-slate-500 transition-colors hover:text-violet-300"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  Use a different password
                 </button>
               </div>
-            </div>
+            )}
 
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-medium py-6"
               disabled={loading}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? (requires2fa ? 'Verifying...' : 'Signing in...') : (requires2fa ? 'Verify Code' : 'Sign In')}
             </Button>
           </form>
 

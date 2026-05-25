@@ -15,14 +15,7 @@ export const usePaymentMethods = () => {
       console.log('[Public] Fetching ACTIVE payment methods...');
       const response = await paymentMethodsCollection.list(true);
       
-      const methodsWithImages = await Promise.all(
-        response.documents.map(async (method: any) => {
-          if (!method.qr_image_url && method.qr_image_id) {
-            method.qr_image_url = storageHelpers.getFileView(method.qr_image_id);
-          }
-          return method;
-        })
-      );
+      const methodsWithImages = response.documents.map((method: any) => method);
       
       console.log(`[Public] Found ${methodsWithImages.length} active payment methods`);
       setPaymentMethods(methodsWithImages);
@@ -65,14 +58,7 @@ export const useAdminPaymentMethods = () => {
       console.log(`[Admin] Found ${response.documents?.length || 0} total payment methods`);
       
       if (response.documents && response.documents.length > 0) {
-        const methodsWithImages = await Promise.all(
-          response.documents.map(async (method: any) => {
-            if (!method.qr_image_url && method.qr_image_id) {
-              method.qr_image_url = storageHelpers.getFileView(method.qr_image_id);
-            }
-            return method;
-          })
-        );
+        const methodsWithImages = response.documents.map((method: any) => method);
         
         setPaymentMethods(methodsWithImages);
       } else {

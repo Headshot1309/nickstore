@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const { MongoClient, ObjectId } = require('mongodb');
+const nodemailer = require('nodemailer');
 const app = express();
 const port = 3001;
 
@@ -17,6 +19,68 @@ const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
 const telegramChatId = process.env.TELEGRAM_CHAT_ID;
 const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
 const adminPassword = process.env.ADMIN_PASSWORD;
+const adminTwoFactorEnabled = process.env.ADMIN_2FA_ENABLED === 'true';
+const smtpConfig = {
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  user: process.env.SMTP_USER,
+  pass: process.env.SMTP_PASS,
+  from: process.env.SMTP_FROM || process.env.SMTP_USER || adminEmail,
+};
+
+const hasSmtpConfig = () => Boolean(smtpConfig.host && smtpConfig.user && smtpConfig.pass);
+
+const hashAdminCode = (code, challengeId) =>
+  crypto
+    .createHash('sha256')
+    .update(`${code}:${challengeId}:${adminPassword || ''}`)
+    .digest('hex');
+
+const createVerificationCode = () => String(crypto.randomInt(100000, 1000000));
+
+const sendAdminVerificationEmail = async (code) => {
+  if (!hasSmtpConfig()) {
+    throw new Error('Email 2FA is enabled but SMTP email is not configured');
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: smtpConfig.host,
+    port: smtpConfig.port,
+    secure: smtpConfig.port === 465,
+    auth: {
+      user: smtpConfig.user,
+      pass: smtpConfig.pass,
+    },
+  });
+
+  await transporter.sendMail({
+    from: smtpConfig.from,
+    to: adminEmail,
+    subject: 'NickStore admin login code',
+    text: `Your NickStore admin verification code is ${code}. It expires in 10 minutes.`,
+    html: `<p>Your NickStore admin verification code is <strong>${code}</strong>.</p><p>It expires in 10 minutes.</p>`,
+  });
+};
+
+const createAdmin2faChallenge = async () => {
+  const database = await getDb();
+  const challengeId = crypto.randomUUID();
+  const code = createVerificationCode();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 10 * 60 * 1000);
+
+  await database.collection('admin_2fa_challenges').insertOne({
+    challengeId,
+    email: adminEmail.toLowerCase(),
+    codeHash: hashAdminCode(code, challengeId),
+    used: false,
+    createdAt: now,
+    expiresAt,
+  });
+
+  await sendAdminVerificationEmail(code);
+  return challengeId;
+};
 
 const escapeTelegramHtml = (value) =>
   String(value ?? '')
@@ -63,6 +127,8 @@ const buildTelegramOrderMessage = (order) => {
     order.denomination ? `<b>Denomination:</b> ${escapeTelegramHtml(order.denomination)}` : '',
     `<b>Total:</b> ${escapeTelegramHtml(formatCurrency(order.total_amount))}`,
     `<b>Payment:</b> ${escapeTelegramHtml(order.payment_method_name)}`,
+    order.receipt_validation?.accepted ? '<b>Receipt:</b> Verified by OCR' : '<b>Receipt:</b> Needs admin review',
+    order.receipt_validation?.detectedAmount ? `<b>Receipt Amount:</b> ${escapeTelegramHtml(formatCurrency(order.receipt_validation.detectedAmount))}` : '',
     `<b>Status:</b> ${escapeTelegramHtml(order.status || 'pending')}`,
     `<b>Date:</b> ${escapeTelegramHtml(formatOrderDate(order.created_at))}`,
     '',
@@ -137,6 +203,16 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (email.toLowerCase() === adminEmail.toLowerCase() && password === adminPassword) {
+      if (adminTwoFactorEnabled) {
+        const challengeId = await createAdmin2faChallenge();
+        return res.json({
+          success: true,
+          requires_2fa: true,
+          challenge_id: challengeId,
+          message: `Verification code sent to ${adminEmail}`,
+        });
+      }
+
       res.json({ 
         success: true, 
         user: { $id: 'admin1', id: 'admin1', email: adminEmail, name: 'Admin' }
@@ -277,6 +353,47 @@ app.post('/api/orders', async (req, res) => {
     res.json(order);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/auth/verify-2fa', async (req, res) => {
+  try {
+    const { challenge_id: challengeId, code } = req.body;
+
+    if (!adminTwoFactorEnabled) {
+      return res.status(400).json({ success: false, message: 'Two-factor authentication is not enabled' });
+    }
+
+    if (!challengeId || !code) {
+      return res.status(400).json({ success: false, message: 'Verification code is required' });
+    }
+
+    const database = await getDb();
+    const challenge = await database.collection('admin_2fa_challenges').findOne({
+      challengeId,
+      email: adminEmail.toLowerCase(),
+      used: false,
+    });
+
+    if (!challenge || new Date(challenge.expiresAt).getTime() < Date.now()) {
+      return res.status(401).json({ success: false, message: 'Verification code expired. Please sign in again.' });
+    }
+
+    if (challenge.codeHash !== hashAdminCode(String(code).trim(), challengeId)) {
+      return res.status(401).json({ success: false, message: 'Invalid verification code' });
+    }
+
+    await database.collection('admin_2fa_challenges').updateOne(
+      { _id: challenge._id },
+      { $set: { used: true, usedAt: new Date() } }
+    );
+
+    res.json({
+      success: true,
+      user: { $id: 'admin1', id: 'admin1', email: adminEmail, name: 'Admin' },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

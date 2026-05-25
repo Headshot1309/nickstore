@@ -15,13 +15,6 @@ export const useOrders = () => {
       const ordersWithUrls = await Promise.all(
         response.documents.map(async (doc: any) => {
           const order = doc as unknown as Order;
-          if (order.receipt_image_id) {
-            try {
-              order.receipt_image_url = storageHelpers.getFileView(order.receipt_image_id);
-            } catch (e) {
-              console.error('Error loading receipt:', e);
-            }
-          }
           return order;
         })
       );
@@ -40,9 +33,6 @@ export const useOrders = () => {
     try {
       const doc = await ordersCollection.get(orderId);
       const order = doc as unknown as Order;
-      if (order.receipt_image_id) {
-        order.receipt_image_url = storageHelpers.getFileView(order.receipt_image_id);
-      }
       return order;
     } catch (err: any) {
       throw new Error(err.message || 'Failed to fetch order');
@@ -59,9 +49,6 @@ export const useOrders = () => {
       
       if (foundOrder) {
         const order = foundOrder as unknown as Order;
-        if (order.receipt_image_id) {
-          order.receipt_image_url = storageHelpers.getFileView(order.receipt_image_id);
-        }
         return order;
       }
       return null;
@@ -83,10 +70,12 @@ export const useCreateOrder = () => {
       setLoading(true);
       
       let receiptImageId = '';
+      let receiptImageUrl = '';
       if (receiptFile) {
         console.log('Uploading receipt image...');
         const upload = await storageHelpers.uploadFile(receiptFile, 'receipt');
         receiptImageId = upload.$id;
+        receiptImageUrl = upload.data;
         console.log('Receipt uploaded with ID:', receiptImageId);
       }
 
@@ -98,6 +87,7 @@ export const useCreateOrder = () => {
         ...orderData,
         order_number: orderNumber,
         receipt_image_id: receiptImageId,
+        receipt_image_url: receiptImageUrl,
         status: 'pending',
         price: String(orderData.price || 0),
         total_amount: String(orderData.total_amount || 0),
@@ -141,13 +131,6 @@ export const useAdminOrders = () => {
       const ordersWithUrls = await Promise.all(
         response.documents.map(async (doc: any) => {
           const order = doc as unknown as Order;
-          if (order.receipt_image_id) {
-            try {
-              order.receipt_image_url = storageHelpers.getFileView(order.receipt_image_id);
-            } catch (e) {
-              console.error('Error loading receipt:', e);
-            }
-          }
           return order;
         })
       );

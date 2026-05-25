@@ -45,6 +45,18 @@ export interface Order {
   payment_method_name: string;
   receipt_image_id?: string;
   receipt_image_url?: string;
+  receipt_validation?: {
+    accepted: boolean;
+    recipientMatched: boolean;
+    timeMatched: boolean;
+    amountMatched: boolean;
+    detectedAmount?: number;
+    expectedAmount?: number;
+    detectedReceiptTime?: string;
+    minutesDifference?: number;
+    message: string;
+    checked_at: string;
+  };
   status: OrderStatus;
   admin_notes?: string;
   created_at?: string;

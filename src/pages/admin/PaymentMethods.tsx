@@ -4,7 +4,6 @@ import { Plus, Pencil, Trash2, Upload, QrCode, Building2, Wallet, RefreshCw } fr
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { useAdminPaymentMethods } from '@/hooks/usePaymentMethods';
 import { useAuth } from '@/contexts/AuthContext';
-import { storageHelpers } from '@/lib/mongodb';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -109,9 +108,6 @@ const PaymentMethods: React.FC = () => {
       
       if (method.qr_image_url) {
         setQrImagePreview(method.qr_image_url);
-      } else if (method.qr_image_id) {
-        const imageUrl = storageHelpers.getFileView(method.qr_image_id);
-        setQrImagePreview(imageUrl);
       } else {
         setQrImagePreview('');
       }
@@ -256,7 +252,7 @@ const PaymentMethods: React.FC = () => {
               {paymentMethods.map((method) => {
                 const Icon = typeIcons[method.type];
                 const hasImageError = imageErrors[method.$id!];
-                const hasImage = method.qr_image_id && !hasImageError;
+                const hasImage = method.qr_image_url && !hasImageError;
                 
                 return (
                   <div
@@ -316,6 +312,12 @@ const PaymentMethods: React.FC = () => {
                         </div>
                       )}
 
+                      {method.qr_image_id && !method.qr_image_url && (
+                        <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-500/10 p-3 text-xs text-amber-100">
+                          QR image must be re-uploaded. The old saved file ID does not contain an image URL.
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-slate-800">
                         <Button
                           variant="ghost"
@@ -371,7 +373,7 @@ const PaymentMethods: React.FC = () => {
               <Label htmlFor="type">Type *</Label>
               <Select
                 value={formData.type}
-                onValueChange={(value: any) => setFormData({ ...formData, type: value })}
+                onValueChange={(value: PaymentMethod['type']) => setFormData({ ...formData, type: value })}
               >
                 <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
                   <SelectValue placeholder="Select type" />

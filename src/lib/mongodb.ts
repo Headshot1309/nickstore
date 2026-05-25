@@ -103,7 +103,8 @@ const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    const errorBody = await response.json().catch(() => null);
+    throw new Error(errorBody?.message || errorBody?.error || `Request failed: ${response.status}`);
   }
 
   return response.json();
@@ -279,13 +280,40 @@ export const account = {
     throw new Error('No session found');
   },
   createEmailPasswordSession: async (email: string, password: string) => {
-    const response = await request<{ success: boolean; user: { $id: string; email: string; name: string }; message?: string }>('/api/auth/login', {
+    const response = await request<{
+      success: boolean;
+      user?: { $id: string; email: string; name: string };
+      requires_2fa?: boolean;
+      challenge_id?: string;
+      message?: string;
+    }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
 
+    if (response.requires_2fa && response.challenge_id) {
+      return {
+        requires2fa: true,
+        challengeId: response.challenge_id,
+        message: response.message,
+      };
+    }
+
     if (!response.success || !response.user) {
       throw new Error(response.message || 'Invalid credentials');
+    }
+
+    localStorage.setItem('adminSession', JSON.stringify(response.user));
+    return response.user;
+  },
+  verifyEmailCode: async (challengeId: string, code: string) => {
+    const response = await request<{ success: boolean; user?: { $id: string; email: string; name: string }; message?: string }>('/api/auth/verify-2fa', {
+      method: 'POST',
+      body: JSON.stringify({ challenge_id: challengeId, code }),
+    });
+
+    if (!response.success || !response.user) {
+      throw new Error(response.message || 'Invalid verification code');
     }
 
     localStorage.setItem('adminSession', JSON.stringify(response.user));
