@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { Toaster } from '@/components/ui/sonner';
 import InstallPrompt from '@/components/shared/InstallPrompt';
@@ -107,6 +108,7 @@ function App() {
         </Routes>
         <InstallPrompt />
       </BrowserRouter>
+      <Analytics />
       <Toaster position="top-right" />
     </AuthProvider>
   );

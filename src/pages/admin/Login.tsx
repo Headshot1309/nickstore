@@ -89,7 +89,7 @@ const Login: React.FC = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
+                  placeholder="Headshot1309@gmail.com"
                   className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
                   required
                   autoComplete="email"
@@ -131,9 +131,9 @@ const Login: React.FC = () => {
           </form>
 
           <div className="mt-6 text-center text-sm text-slate-500">
-            <p>Use your Appwrite credentials:</p>
-            <p className="font-mono text-xs">admin@example.com</p>
-            <p className="font-mono text-xs">(the password you set in Appwrite Console)</p>
+            <p>Admin access:</p>
+            <p className="font-mono text-xs">Headshot1309@gmail.com</p>
+            <p className="text-xs">Use the configured admin password.</p>
           </div>
         </div>
 

@@ -279,12 +279,17 @@ export const account = {
     throw new Error('No session found');
   },
   createEmailPasswordSession: async (email: string, password: string) => {
-    if (email === 'admin@example.com' && password === 'admin123') {
-      const user = { $id: 'admin1', email, name: 'Admin' };
-      localStorage.setItem('adminSession', JSON.stringify(user));
-      return user;
+    const response = await request<{ success: boolean; user: { $id: string; email: string; name: string }; message?: string }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.success || !response.user) {
+      throw new Error(response.message || 'Invalid credentials');
     }
-    throw new Error('Invalid credentials');
+
+    localStorage.setItem('adminSession', JSON.stringify(response.user));
+    return response.user;
   },
   deleteSession: async (_sessionId: string) => {
     localStorage.removeItem('adminSession');

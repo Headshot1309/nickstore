@@ -15,6 +15,8 @@ let db;
 
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
 const telegramChatId = process.env.TELEGRAM_CHAT_ID;
+const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
+const adminPassword = process.env.ADMIN_PASSWORD;
 
 const escapeTelegramHtml = (value) =>
   String(value ?? '')
@@ -130,11 +132,14 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // Simple authentication (replace with real auth)
-    if (email === 'admin@example.com' && password === 'admin123') {
+    if (!adminPassword) {
+      return res.status(503).json({ success: false, message: 'Admin password is not configured' });
+    }
+
+    if (email.toLowerCase() === adminEmail.toLowerCase() && password === adminPassword) {
       res.json({ 
         success: true, 
-        user: { id: 'admin1', email, name: 'Admin' }
+        user: { $id: 'admin1', id: 'admin1', email: adminEmail, name: 'Admin' }
       });
     } else {
       res.status(401).json({ success: false, message: 'Invalid credentials' });
