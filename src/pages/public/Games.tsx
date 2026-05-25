@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { Search, Gamepad2, Sparkles } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Search, Gamepad2, Sparkles, ShieldCheck, Zap } from 'lucide-react';
 import Navbar from '@/components/public/Navbar';
 import Footer from '@/components/public/Footer';
 import { GameCard } from '@/components/public/GameCard';
@@ -15,13 +15,18 @@ const Games: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
 
   // Debounced search to prevent UI blocking
-  const debouncedSetSearch = useCallback(
-    debounce((value: string) => {
+  const debouncedSetSearch = useMemo(
+    () =>
+      debounce((value: string) => {
       setSearchQuery(value);
       setIsSearching(false);
-    }, 300),
+      }, 300),
     []
   );
+
+  useEffect(() => {
+    return () => debouncedSetSearch.cancel();
+  }, [debouncedSetSearch]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setIsSearching(true);
@@ -37,34 +42,50 @@ const Games: React.FC = () => {
   const isLoading = loading || isSearching;
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen overflow-x-hidden bg-[#020617]">
       <Navbar />
 
-      <main className="pt-6 pb-16 sm:pt-8 sm:pb-20">
-        {/* Header with animation */}
-        <div className="container mx-auto px-4 mb-10">
-          <div className="max-w-2xl mx-auto text-center animate-slide-up">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-4 py-2 animate-pulse-slow">
-              <Sparkles className="w-4 h-4 text-violet-400" />
-              <span className="text-sm text-violet-400">Discover & Top Up</span>
+      <main className="pb-16 sm:pb-20">
+        <section className="relative overflow-hidden border-b border-slate-800/80 bg-slate-950 py-12 sm:py-16">
+          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(124,58,237,0.22),transparent_36%),linear-gradient(45deg,rgba(34,211,238,0.11),transparent_34%)]" />
+          <div className="container relative mx-auto px-4">
+            <div className="mx-auto max-w-3xl text-center animate-slide-up">
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-violet-400/25 bg-violet-500/10 px-4 py-2">
+                <Sparkles className="h-4 w-4 text-violet-300" />
+                <span className="text-sm font-medium text-violet-200">Discover and top up</span>
+              </div>
+              <h1 className="text-4xl font-black leading-tight text-white sm:text-5xl">
+                Find the game, pick the package, track the order.
+              </h1>
+              <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-slate-400 sm:text-base">
+                A focused catalog for game credits, diamonds, UC, and passes with fast mobile search.
+              </p>
             </div>
-            <h1 className="mb-4 text-3xl font-bold leading-tight text-white md:text-4xl animate-fade-in-up">
-              All <span className="text-violet-400">Games</span>
-            </h1>
-            <p className="text-slate-400 animate-fade-in-up animation-delay-200">
-              Browse our complete collection of supported games and top up instantly.
-            </p>
-          </div>
-        </div>
 
-        {/* Search with animation */}
-        <div className="container mx-auto px-4 mb-10 animate-fade-in-up animation-delay-300">
-          <div className="group relative mx-auto max-w-md">
+            <div className="mx-auto mt-8 grid max-w-3xl grid-cols-1 gap-3 text-sm text-slate-300 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                <Zap className="mb-3 h-5 w-5 text-emerald-300" />
+                Fast checkout
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                <ShieldCheck className="mb-3 h-5 w-5 text-cyan-300" />
+                Secure order flow
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                <Gamepad2 className="mb-3 h-5 w-5 text-violet-300" />
+                Player-first catalog
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="container mx-auto mb-10 px-4 pt-8 animate-fade-in-up animation-delay-300">
+          <div className="group relative mx-auto max-w-xl">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 transition-all duration-300 group-focus-within:text-violet-400" />
             <Input
               placeholder="Search games..."
               onChange={handleSearchChange}
-              className="rounded-2xl border-slate-800 bg-slate-900/70 py-6 pl-12 text-base text-white shadow-xl shadow-slate-950/20 transition-all duration-300 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 sm:text-lg"
+              className="h-14 rounded-2xl border-slate-800 bg-slate-900/80 pl-12 text-base text-white shadow-xl shadow-slate-950/30 transition-all duration-300 placeholder:text-slate-600 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
             />
             {isSearching && (
               <div className="absolute right-4 top-1/2 -translate-y-1/2">
