@@ -33,6 +33,7 @@ export interface Order {
   game_name: string;
   product_id: string;
   product_name: string;
+  denomination?: string;
   price: number | string;
   quantity: number | string;
   total_amount: number | string;

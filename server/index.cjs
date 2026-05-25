@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const { Blob } = require('buffer');
 const { MongoClient, ObjectId } = require('mongodb');
 const nodemailer = require('nodemailer');
 const app = express();
@@ -164,6 +165,54 @@ const sendTelegramOrderNotification = async (order) => {
   }
 
   return data;
+};
+
+const dataUrlToTelegramPhoto = (dataUrl) => {
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl || '');
+  if (!match) return null;
+
+  return {
+    blob: new Blob([Buffer.from(match[2], 'base64')], { type: match[1] }),
+    filename: `receipt-${Date.now()}.${match[1].split('/')[1] || 'jpg'}`,
+  };
+};
+
+const sendTelegramReceiptPhoto = async (order) => {
+  if (!telegramBotToken || !telegramChatId || !order.receipt_image_url) {
+    return { ok: false, skipped: true };
+  }
+
+  const photo = dataUrlToTelegramPhoto(order.receipt_image_url);
+  if (!photo) {
+    return { ok: false, skipped: true, message: 'Receipt is not a data URL image' };
+  }
+
+  const form = new FormData();
+  form.append('chat_id', telegramChatId);
+  form.append('photo', photo.blob, photo.filename);
+  form.append('parse_mode', 'HTML');
+  form.append('caption', [
+    `<b>Receipt for ${escapeTelegramHtml(order.order_number)}</b>`,
+    `<b>Total:</b> ${escapeTelegramHtml(formatCurrency(order.total_amount))}`,
+    order.receipt_validation?.message ? `<b>Check:</b> ${escapeTelegramHtml(order.receipt_validation.message)}` : '',
+  ].filter(Boolean).join('\n'));
+
+  const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendPhoto`, {
+    method: 'POST',
+    body: form,
+  });
+
+  const data = await response.json();
+  if (!data.ok) {
+    console.error('Telegram receipt photo failed:', data);
+  }
+  return data;
+};
+
+const sendTelegramFullOrder = async (order) => {
+  const messageResult = await sendTelegramOrderNotification(order);
+  const receiptResult = await sendTelegramReceiptPhoto(order);
+  return { messageResult, receiptResult };
 };
 
 async function connectDB() {
@@ -346,7 +395,7 @@ app.post('/api/orders', async (req, res) => {
     const result = await database.collection('orders').insertOne(data);
     const order = { ...data, $id: result.insertedId.toString() };
 
-    sendTelegramOrderNotification(order).catch((error) => {
+    sendTelegramFullOrder(order).catch((error) => {
       console.error('Telegram order notification error:', error);
     });
 

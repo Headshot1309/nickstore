@@ -12,6 +12,7 @@ import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import type { PaymentMethod } from '@/types';
 import type { ReceiptValidationResult } from '@/lib/receiptValidation';
+import { getSupportWhatsAppLink } from '@/lib/orderSharing';
 
 type ReceiptCheckState = {
   status: 'idle' | 'checking' | 'valid' | 'invalid';
@@ -143,9 +144,7 @@ const Payment: React.FC = () => {
     }
   };
 
-  const whatsappNumber = '60137345871';
-  const whatsappMessage = 'Hi, I need assistance with my order.';
-  const whatsappLink = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`;
+  const whatsappLink = getSupportWhatsAppLink();
 
   if (!game || !product) return null;
 
@@ -173,29 +172,32 @@ const Payment: React.FC = () => {
 
           <StepProgress currentStep={2} />
 
-          <div className="mb-6 rounded-3xl border border-slate-800 bg-slate-900/55 p-5 shadow-xl shadow-slate-950/20">
+          <div className="mb-6 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/65 shadow-xl shadow-slate-950/20">
+            <div className="h-1 bg-gradient-to-r from-cyan-400 via-violet-400 to-fuchsia-400" />
+            <div className="p-5 sm:p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-violet-300">Secure checkout</p>
-                <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Pay, upload proof, and track delivery.</h1>
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-cyan-300">Secure checkout</p>
+                <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Fast top-up confirmation.</h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                  Choose your payment method, upload a receipt, and we will send the order to the admin queue immediately.
+                  Pay with the QR, upload a verified receipt, and the full order plus receipt goes straight to admin.
                 </p>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs text-slate-400 md:min-w-80">
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+              <div className="grid grid-cols-3 gap-2 text-center text-xs text-slate-300 md:min-w-80">
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3">
                   <WalletCards className="mx-auto mb-2 h-5 w-5 text-violet-300" />
                   Payment
                 </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+                <div className="rounded-2xl border border-violet-300/20 bg-violet-300/10 p-3">
                   <Upload className="mx-auto mb-2 h-5 w-5 text-cyan-300" />
                   Receipt
                 </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+                <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3">
                   <Clock3 className="mx-auto mb-2 h-5 w-5 text-emerald-300" />
-                  Processing
+                  Sent
                 </div>
               </div>
+            </div>
             </div>
           </div>
 
@@ -330,7 +332,8 @@ const Payment: React.FC = () => {
                 )}
               </div>
 
-              <Button
+              <div className="sticky bottom-3 z-20 rounded-2xl border border-slate-800 bg-slate-950/90 p-2 shadow-2xl shadow-black/35 backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-0">
+                <Button
                 onClick={handleSubmit}
                 disabled={!selectedMethod || creatingOrder || isSubmitting || receiptCheck.status === 'checking'}
                 className="h-12 w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 py-6 text-white shadow-lg shadow-violet-950/25 transition-transform hover:scale-[1.01] hover:from-violet-600 hover:to-fuchsia-600"
@@ -347,6 +350,7 @@ const Payment: React.FC = () => {
                   </>
                 )}
               </Button>
+              </div>
               <div className="flex items-start gap-2 rounded-2xl border border-slate-800 bg-slate-900/55 p-4 text-xs leading-5 text-slate-400">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
                 Receipt checking uses OCR and can make mistakes on blurry screenshots. Admin still sees the uploaded receipt and validation result.

@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle, MessageCircle, Copy, ArrowLeft, Clock, RefreshCw, XCircle, Loader2, AlertTriangle } from 'lucide-react';
+import { CheckCircle, MessageCircle, Copy, ArrowLeft, Clock, RefreshCw, XCircle, Loader2, AlertTriangle, Send, ShieldCheck } from 'lucide-react';
 import Navbar from '@/components/public/Navbar';
 import Footer from '@/components/public/Footer';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useOrders } from '@/hooks/useOrders';
+import type { Order } from '@/types';
+import { getOrderWhatsAppLink, getSupportWhatsAppLink } from '@/lib/orderSharing';
 
 const OrderSuccess: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const orderNumber = searchParams.get('order');
   const { getOrderByNumber } = useOrders();
-  const [order, setOrder] = useState<any>(null);
+  const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -129,11 +131,9 @@ const OrderSuccess: React.FC = () => {
     return `RM ${numericAmount.toFixed(2)}`;
   };
 
-  const whatsappNumber = '60137345871';
-  const whatsappMessage = order 
-    ? `Hi, I'm inquiring about my order *${order.order_number}* (Status: ${order.status}).`
-    : `Hi, I just placed order *${orderNumber}*. Please process it ASAP.`;
-  const whatsappLink = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`;
+  const whatsappLink = order
+    ? getOrderWhatsAppLink(order)
+    : getSupportWhatsAppLink(`Hi, I just placed order ${orderNumber}. Please process it ASAP.`);
 
   // Status-based UI configuration
   const getStatusConfig = () => {
@@ -279,10 +279,11 @@ const OrderSuccess: React.FC = () => {
 
       <Navbar />
 
-      <main className="pt-20 pb-20">
-        <div className="container mx-auto px-4 max-w-2xl">
-          {/* Success Card with status-based styling */}
-          <div className={`bg-slate-900/50 border border-slate-800 rounded-2xl p-6 md:p-8 text-center animate-slide-up`}>
+      <main className="pt-6 pb-16 sm:pt-10 sm:pb-20">
+        <div className="container mx-auto grid max-w-5xl gap-6 px-4 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
+          <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/65 shadow-2xl shadow-black/30 animate-slide-up">
+            <div className="h-1.5 bg-gradient-to-r from-emerald-400 via-cyan-400 to-violet-400" />
+            <div className="p-5 text-center sm:p-8">
             {/* Status Icon with bounce animation */}
             <div className={`w-24 h-24 rounded-full ${statusConfig.bgColor} flex items-center justify-center mx-auto mb-6 animate-bounce-in`}>
               <div className="relative">
@@ -299,6 +300,27 @@ const OrderSuccess: React.FC = () => {
             <p className="text-slate-400 mb-6 animate-fade-in-up animation-delay-200">
               {statusConfig.subtitle}
             </p>
+
+            <div className="mb-6 grid grid-cols-1 gap-3 text-left sm:grid-cols-2">
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-emerald-200">
+                  <Send className="h-4 w-4" />
+                  Sent to admin
+                </div>
+                <p className="mt-2 text-xs leading-5 text-emerald-100/75">
+                  Order details and receipt are automatically forwarded for processing.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-cyan-200">
+                  <ShieldCheck className="h-4 w-4" />
+                  Receipt checked
+                </div>
+                <p className="mt-2 text-xs leading-5 text-cyan-100/75">
+                  {order.receipt_validation?.message || 'Admin can review your uploaded receipt.'}
+                </p>
+              </div>
+            </div>
 
             {/* Status Badge with pulse animation */}
             <div className="inline-flex items-center gap-2 mb-6 animate-fade-in-up animation-delay-300">
@@ -319,7 +341,7 @@ const OrderSuccess: React.FC = () => {
             )}
 
             {/* Order Number with hover animation */}
-            <div className="bg-slate-800/50 rounded-xl p-5 mb-6 transition-all duration-300 hover:bg-slate-800/70 hover:scale-[1.02] animate-fade-in-up animation-delay-400">
+            <div className="bg-slate-950/55 rounded-2xl border border-slate-800 p-5 mb-6 transition-all duration-300 hover:bg-slate-900/80 animate-fade-in-up animation-delay-400">
               <p className="text-slate-400 text-sm mb-2">Your Order Number</p>
               <div className="flex items-center justify-center gap-3">
                 <p className="text-xl md:text-2xl font-bold text-violet-400 font-mono tracking-wider animate-glow">
@@ -339,7 +361,7 @@ const OrderSuccess: React.FC = () => {
             </div>
 
             {/* Order Details */}
-            <div className="bg-slate-800/50 rounded-xl p-5 mb-6 text-left animate-fade-in-up animation-delay-500">
+            <div className="bg-slate-950/55 rounded-2xl border border-slate-800 p-5 mb-6 text-left animate-fade-in-up animation-delay-500">
               <h3 className="text-white font-semibold mb-4 pb-2 border-b border-slate-700">
                 Order Summary
               </h3>
@@ -382,7 +404,7 @@ const OrderSuccess: React.FC = () => {
             </div>
 
             {/* Payment Info */}
-            <div className="bg-slate-800/50 rounded-xl p-5 mb-6 text-left animate-fade-in-up animation-delay-600">
+            <div className="bg-slate-950/55 rounded-2xl border border-slate-800 p-5 mb-6 text-left animate-fade-in-up animation-delay-600">
               <h3 className="text-white font-semibold mb-3">Payment Information</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -392,7 +414,7 @@ const OrderSuccess: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="text-slate-400">Order Date</span>
                   <span className="text-white">
-                    {new Date(order.created_at).toLocaleString('en-MY', {
+                    {new Date(order.created_at || Date.now()).toLocaleString('en-MY', {
                       day: '2-digit',
                       month: 'short',
                       year: 'numeric',
@@ -426,9 +448,9 @@ const OrderSuccess: React.FC = () => {
                 rel="noopener noreferrer" 
                 className="flex-1 transition-all duration-300 hover:scale-105"
               >
-                <Button className="w-full border-green-500 text-green-400 hover:bg-green-500/10 bg-transparent transition-all duration-300">
+                <Button className="w-full border-green-500 bg-green-500/10 text-green-300 hover:bg-green-500/20 transition-all duration-300">
                   <MessageCircle className="w-4 h-4 mr-2 animate-pulse" />
-                  Contact Admin
+                  Send Full WhatsApp Template
                 </Button>
               </a>
               <Button
@@ -449,15 +471,42 @@ const OrderSuccess: React.FC = () => {
                 Continue Shopping
               </button>
             </div>
+            </div>
           </div>
 
-          {/* Help Text */}
-          <div className="text-center mt-6 animate-fade-in-up animation-delay-900">
-            <p className="text-xs text-slate-500">
-              A confirmation has been sent to your email.
-              <br />
-              Need help? Contact us on WhatsApp.
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/55 p-5 shadow-xl shadow-black/20 lg:sticky lg:top-24">
+            <h2 className="text-lg font-semibold text-white">Quick Admin Package</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              This is what gets sent so the order can be submitted without opening the dashboard.
             </p>
+            <div className="mt-5 space-y-3 text-sm">
+              <div className="flex justify-between gap-4 rounded-xl bg-slate-950/55 p-3">
+                <span className="text-slate-400">Order ID</span>
+                <span className="text-right font-mono text-white">{order.order_number}</span>
+              </div>
+              <div className="flex justify-between gap-4 rounded-xl bg-slate-950/55 p-3">
+                <span className="text-slate-400">Game ID</span>
+                <span className="text-right font-mono text-white">{order.user_game_id}</span>
+              </div>
+              <div className="flex justify-between gap-4 rounded-xl bg-slate-950/55 p-3">
+                <span className="text-slate-400">Product</span>
+                <span className="text-right text-white">{order.product_name}</span>
+              </div>
+              <div className="flex justify-between gap-4 rounded-xl bg-slate-950/55 p-3">
+                <span className="text-slate-400">Total</span>
+                <span className="text-right font-semibold text-emerald-300">{formatCurrency(order.total_amount)}</span>
+              </div>
+            </div>
+            {order.receipt_image_url && (
+              <div className="mt-5">
+                <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Receipt</p>
+                <img
+                  src={order.receipt_image_url}
+                  alt="Uploaded payment receipt"
+                  className="max-h-72 w-full rounded-2xl border border-slate-800 object-contain bg-slate-950"
+                />
+              </div>
+            )}
           </div>
         </div>
       </main>
