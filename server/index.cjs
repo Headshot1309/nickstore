@@ -114,6 +114,8 @@ async function connectDB() {
 
 connectDB();
 
+const getDb = async () => db || connectDB();
+
 // Helper function
 const toObjectId = (id) => {
   try {
@@ -200,9 +202,10 @@ app.delete('/api/games/:id', async (req, res) => {
 // Products endpoints
 app.get('/api/products', async (req, res) => {
   try {
+    const database = await getDb();
     const { game_id } = req.query;
     const query = game_id ? { game_id } : {};
-    const products = await db.collection('products').find(query).toArray();
+    const products = await database.collection('products').find(query).toArray();
     res.json({ documents: products.map(doc => ({ ...doc, $id: doc._id.toString() })) });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -211,8 +214,9 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', async (req, res) => {
   try {
+    const database = await getDb();
     const data = { ...req.body, created_at: new Date(), updated_at: new Date() };
-    const result = await db.collection('products').insertOne(data);
+    const result = await database.collection('products').insertOne(data);
     res.json({ ...data, $id: result.insertedId.toString() });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -221,8 +225,9 @@ app.post('/api/products', async (req, res) => {
 
 app.put('/api/products/:id', async (req, res) => {
   try {
+    const database = await getDb();
     const data = { ...req.body, updated_at: new Date() };
-    await db.collection('products').updateOne(
+    await database.collection('products').updateOne(
       { _id: toObjectId(req.params.id) },
       { $set: data }
     );
@@ -234,7 +239,8 @@ app.put('/api/products/:id', async (req, res) => {
 
 app.delete('/api/products/:id', async (req, res) => {
   try {
-    await db.collection('products').deleteOne({ _id: toObjectId(req.params.id) });
+    const database = await getDb();
+    await database.collection('products').deleteOne({ _id: toObjectId(req.params.id) });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -244,7 +250,8 @@ app.delete('/api/products/:id', async (req, res) => {
 // Orders endpoints
 app.get('/api/orders', async (req, res) => {
   try {
-    const orders = await db.collection('orders').find({}).sort({ created_at: -1 }).toArray();
+    const database = await getDb();
+    const orders = await database.collection('orders').find({}).sort({ created_at: -1 }).toArray();
     res.json({ documents: orders.map(doc => ({ ...doc, $id: doc._id.toString() })) });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -253,8 +260,9 @@ app.get('/api/orders', async (req, res) => {
 
 app.post('/api/orders', async (req, res) => {
   try {
+    const database = await getDb();
     const data = { ...req.body, created_at: new Date(), updated_at: new Date() };
-    const result = await db.collection('orders').insertOne(data);
+    const result = await database.collection('orders').insertOne(data);
     const order = { ...data, $id: result.insertedId.toString() };
 
     sendTelegramOrderNotification(order).catch((error) => {
@@ -305,8 +313,9 @@ app.post('/api/telegram/test-order', async (req, res) => {
 
 app.put('/api/orders/:id', async (req, res) => {
   try {
+    const database = await getDb();
     const data = { ...req.body, updated_at: new Date() };
-    await db.collection('orders').updateOne(
+    await database.collection('orders').updateOne(
       { _id: toObjectId(req.params.id) },
       { $set: data }
     );
@@ -318,7 +327,8 @@ app.put('/api/orders/:id', async (req, res) => {
 
 app.delete('/api/orders/:id', async (req, res) => {
   try {
-    await db.collection('orders').deleteOne({ _id: toObjectId(req.params.id) });
+    const database = await getDb();
+    await database.collection('orders').deleteOne({ _id: toObjectId(req.params.id) });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -328,7 +338,8 @@ app.delete('/api/orders/:id', async (req, res) => {
 // Payment Methods endpoints
 app.get('/api/payment-methods', async (req, res) => {
   try {
-    const methods = await db.collection('payment_methods').find({}).toArray();
+    const database = await getDb();
+    const methods = await database.collection('payment_methods').find({}).toArray();
     res.json({ documents: methods.map(doc => ({ ...doc, $id: doc._id.toString() })) });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -337,8 +348,9 @@ app.get('/api/payment-methods', async (req, res) => {
 
 app.post('/api/payment-methods', async (req, res) => {
   try {
+    const database = await getDb();
     const data = { ...req.body, created_at: new Date(), updated_at: new Date() };
-    const result = await db.collection('payment_methods').insertOne(data);
+    const result = await database.collection('payment_methods').insertOne(data);
     res.json({ ...data, $id: result.insertedId.toString() });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -347,8 +359,9 @@ app.post('/api/payment-methods', async (req, res) => {
 
 app.put('/api/payment-methods/:id', async (req, res) => {
   try {
+    const database = await getDb();
     const data = { ...req.body, updated_at: new Date() };
-    await db.collection('payment_methods').updateOne(
+    await database.collection('payment_methods').updateOne(
       { _id: toObjectId(req.params.id) },
       { $set: data }
     );
@@ -360,7 +373,8 @@ app.put('/api/payment-methods/:id', async (req, res) => {
 
 app.delete('/api/payment-methods/:id', async (req, res) => {
   try {
-    await db.collection('payment_methods').deleteOne({ _id: toObjectId(req.params.id) });
+    const database = await getDb();
+    await database.collection('payment_methods').deleteOne({ _id: toObjectId(req.params.id) });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
