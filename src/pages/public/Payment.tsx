@@ -206,6 +206,15 @@ const Payment: React.FC = () => {
                 </div>
               )}
 
+              {selectedMethod && !selectedMethod.qr_image_url && (selectedMethod.type === 'qr_code' || selectedMethod.type === 'e_wallet') && (
+                <div className="rounded-3xl border border-amber-400/20 bg-amber-500/10 p-5 text-sm leading-6 text-amber-100 shadow-xl shadow-slate-950/20 sm:p-6">
+                  <h3 className="mb-2 text-lg font-semibold text-white">QR code needs to be re-uploaded</h3>
+                  <p>
+                    This payment method was saved before image storage was fixed. Re-upload the QR image in Admin → Payment Methods, then it will appear here.
+                  </p>
+                </div>
+              )}
+
               {/* Receipt Upload */}
               <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-slate-950/20 sm:p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">Upload Payment Receipt</h3>

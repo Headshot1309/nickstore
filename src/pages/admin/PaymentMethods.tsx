@@ -74,6 +74,8 @@ const PaymentMethods: React.FC = () => {
     description: '',
     account_name: '',
     account_number: '',
+    qr_image_id: '',
+    qr_image_url: '',
     instructions: '',
     is_active: true,
     sort_order: 0,
@@ -98,12 +100,16 @@ const PaymentMethods: React.FC = () => {
         description: method.description,
         account_name: method.account_name || '',
         account_number: method.account_number || '',
+        qr_image_id: method.qr_image_id || '',
+        qr_image_url: method.qr_image_url || '',
         instructions: method.instructions || '',
         is_active: method.is_active,
         sort_order: method.sort_order,
       });
       
-      if (method.qr_image_id) {
+      if (method.qr_image_url) {
+        setQrImagePreview(method.qr_image_url);
+      } else if (method.qr_image_id) {
         const imageUrl = storageHelpers.getFileView(method.qr_image_id);
         setQrImagePreview(imageUrl);
       } else {
@@ -117,6 +123,8 @@ const PaymentMethods: React.FC = () => {
         description: '',
         account_name: '',
         account_number: '',
+        qr_image_id: '',
+        qr_image_url: '',
         instructions: '',
         is_active: true,
         sort_order: paymentMethods.length,
@@ -429,7 +437,7 @@ const PaymentMethods: React.FC = () => {
                         onClick={() => {
                           setQrImagePreview('');
                           setQrImageFile(null);
-                          // Don't try to set qr_image_id in formData since it doesn't exist
+                          setFormData({ ...formData, qr_image_id: '', qr_image_url: '' });
                         }}
                         className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white text-xs hover:bg-red-600 transition-colors"
                       >

@@ -17,7 +17,7 @@ export const usePaymentMethods = () => {
       
       const methodsWithImages = await Promise.all(
         response.documents.map(async (method: any) => {
-          if (method.qr_image_id) {
+          if (!method.qr_image_url && method.qr_image_id) {
             method.qr_image_url = storageHelpers.getFileView(method.qr_image_id);
           }
           return method;
@@ -67,7 +67,7 @@ export const useAdminPaymentMethods = () => {
       if (response.documents && response.documents.length > 0) {
         const methodsWithImages = await Promise.all(
           response.documents.map(async (method: any) => {
-            if (method.qr_image_id) {
+            if (!method.qr_image_url && method.qr_image_id) {
               method.qr_image_url = storageHelpers.getFileView(method.qr_image_id);
             }
             return method;
@@ -96,12 +96,14 @@ export const useAdminPaymentMethods = () => {
     try {
       setLoading(true);
       let qr_image_id = '';
+      let qr_image_url = data.qr_image_url || '';
       
       if (imageFile) {
         try {
           console.log('[Admin] Uploading QR image...');
           const upload = await storageHelpers.uploadFile(imageFile, 'payment_qr');
           qr_image_id = upload.$id;
+          qr_image_url = upload.data;
           console.log('[Admin] Uploaded with ID:', qr_image_id);
         } catch (uploadError: any) {
           throw new Error(`Failed to upload QR code: ${uploadError.message}`);
@@ -115,6 +117,7 @@ export const useAdminPaymentMethods = () => {
         account_name: data.account_name || '',
         account_number: data.account_number || '',
         qr_image_id: qr_image_id,
+        qr_image_url: qr_image_url,
         instructions: data.instructions || '',
         is_active: data.is_active,
         sort_order: data.sort_order || 0,
@@ -141,11 +144,13 @@ export const useAdminPaymentMethods = () => {
     try {
       setLoading(true);
       let qr_image_id = data.qr_image_id;
+      let qr_image_url = data.qr_image_url || '';
       
       if (imageFile) {
         try {
           const upload = await storageHelpers.uploadFile(imageFile, 'payment_qr');
           qr_image_id = upload.$id;
+          qr_image_url = upload.data;
         } catch (uploadError: any) {
           throw new Error(`Failed to upload QR code: ${uploadError.message}`);
         }
@@ -158,6 +163,7 @@ export const useAdminPaymentMethods = () => {
         account_name: data.account_name || '',
         account_number: data.account_number || '',
         qr_image_id: qr_image_id,
+        qr_image_url: qr_image_url,
         instructions: data.instructions || '',
         is_active: data.is_active,
         sort_order: data.sort_order || 0,
