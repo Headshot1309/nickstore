@@ -383,6 +383,7 @@ app.post('/api/catalog/seed-market', async (_req, res) => {
     const database = await getDb();
     const now = new Date();
     const gameIdsByKey = {};
+    const pricedGameKeys = new Set(marketCatalogProducts.map((product) => product.gameKey));
     let gamesUpserted = 0;
     let productsUpserted = 0;
 
@@ -395,7 +396,7 @@ app.post('/api/catalog/seed-market', async (_req, res) => {
             description: game.description,
             image_id: '',
             image_url: game.image_url,
-            is_active: true,
+            is_active: game.is_active ?? pricedGameKeys.has(game.key),
             updated_at: now,
           },
           $setOnInsert: { created_at: now },
@@ -428,6 +429,7 @@ app.post('/api/catalog/seed-market', async (_req, res) => {
             denomination: product.denomination,
             price: product.price,
             original_price: product.original_price,
+            market_reference: product.market_reference,
             description: 'MYR starter catalog item. Review pricing before running promotions.',
             is_active: true,
             updated_at: now,

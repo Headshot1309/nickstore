@@ -17,6 +17,12 @@ export interface Product {
   denomination: string;
   price: number;
   original_price?: number;
+  market_reference?: {
+    source: string;
+    source_url?: string;
+    observed_price?: number;
+    checked_at?: string;
+  };
   description?: string;
   is_active: boolean;
   created_at?: string;

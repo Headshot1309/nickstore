@@ -185,6 +185,12 @@ const Products: React.FC = () => {
     return `RM ${amount.toFixed(2)}`;
   };
 
+  const getReferenceDelta = (product: Product) => {
+    const reference = product.market_reference?.observed_price;
+    if (!reference) return null;
+    return Number(product.price || 0) - reference;
+  };
+
   if (!isAuthenticated) return null;
 
   const isLoading = loading || gamesLoading;
@@ -313,6 +319,7 @@ const Products: React.FC = () => {
                       <th className="text-left p-4 text-slate-400 font-medium">Name</th>
                       <th className="text-left p-4 text-slate-400 font-medium">Denomination</th>
                       <th className="text-left p-4 text-slate-400 font-medium">Price</th>
+                      <th className="text-left p-4 text-slate-400 font-medium">Market Ref</th>
                       <th className="text-left p-4 text-slate-400 font-medium">Status</th>
                       <th className="text-right p-4 text-slate-400 font-medium">Actions</th>
                     </tr>
@@ -331,6 +338,30 @@ const Products: React.FC = () => {
                             <span className="text-slate-500 line-through ml-2 text-sm">
                               {formatCurrency(product.original_price)}
                             </span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          {product.market_reference ? (
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 text-xs font-medium text-cyan-200">
+                                  {product.market_reference.source}
+                                </span>
+                                {getReferenceDelta(product) !== null && (
+                                  <span className={`text-xs ${getReferenceDelta(product)! <= 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                    {getReferenceDelta(product)! <= 0 ? '' : '+'}
+                                    {formatCurrency(getReferenceDelta(product)!)}
+                                  </span>
+                                )}
+                              </div>
+                              {product.market_reference.observed_price && (
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Ref {formatCurrency(product.market_reference.observed_price)}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-600">Manual</span>
                           )}
                         </td>
                         <td className="p-4">
@@ -377,6 +408,18 @@ const Products: React.FC = () => {
                         <p className="text-xs text-slate-500">{product.game_name}</p>
                         <h3 className="mt-1 truncate font-semibold text-white">{product.name}</h3>
                         <p className="mt-1 text-sm text-slate-400">{product.denomination}</p>
+                        {product.market_reference && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                            <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 font-medium text-cyan-200">
+                              {product.market_reference.source}
+                            </span>
+                            {product.market_reference.observed_price && (
+                              <span className="text-slate-500">
+                                Ref {formatCurrency(product.market_reference.observed_price)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <span
                         className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${
