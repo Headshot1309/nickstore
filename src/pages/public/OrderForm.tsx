@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, User, Mail, Phone, Gamepad2, Server } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, ChevronRight, Mail, Phone, Server, ShieldCheck, User, Zap } from 'lucide-react';
 import Navbar from '@/components/public/Navbar';
 import Footer from '@/components/public/Footer';
 import { StepProgress } from '@/components/public/StepProgress';
@@ -88,19 +88,45 @@ const OrderForm: React.FC = () => {
           {/* Progress */}
           <StepProgress currentStep={1} />
 
+          <div className="mb-6 rounded-3xl border border-slate-800 bg-slate-900/55 p-5 shadow-xl shadow-slate-950/20">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-violet-300">Player details</p>
+                <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Confirm where we should deliver.</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+                  Enter the same game ID and server shown in your account. This keeps checkout short and helps avoid delivery mistakes.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs text-slate-400 md:min-w-80">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+                  <Zap className="mx-auto mb-2 h-5 w-5 text-emerald-300" />
+                  Fast check
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+                  <ShieldCheck className="mx-auto mb-2 h-5 w-5 text-cyan-300" />
+                  Secure
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+                  <BadgeCheck className="mx-auto mb-2 h-5 w-5 text-violet-300" />
+                  Tracked
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
             {/* Form */}
             <div className="lg:col-span-2">
-              <Card className="rounded-2xl border-slate-800 bg-slate-900/60 shadow-xl shadow-slate-950/20">
+              <Card className="rounded-3xl border-slate-800 bg-slate-900/70 shadow-xl shadow-slate-950/20">
                 <CardHeader>
-                  <CardTitle className="text-white">Enter Your Game Details</CardTitle>
+                  <CardTitle className="text-white">Enter game account details</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="userGameId" className="text-slate-300">
-                          <Gamepad2 className="w-4 h-4 inline mr-2" />
+                          <User className="w-4 h-4 inline mr-2" />
                           Game ID *
                         </Label>
                         <Input
@@ -108,7 +134,7 @@ const OrderForm: React.FC = () => {
                           value={formData.userGameId}
                           onChange={(e) => setFormData({ ...formData, userGameId: e.target.value })}
                           placeholder="Enter your game ID"
-                          className={`bg-slate-800 border-slate-700 text-white ${
+                          className={`h-12 rounded-xl bg-slate-950 border-slate-700 text-white ${
                             errors.userGameId ? 'border-red-500' : ''
                           }`}
                         />
@@ -127,7 +153,7 @@ const OrderForm: React.FC = () => {
                           value={formData.userGameServer}
                           onChange={(e) => setFormData({ ...formData, userGameServer: e.target.value })}
                           placeholder="e.g., Server 1"
-                          className="bg-slate-800 border-slate-700 text-white"
+                          className="h-12 rounded-xl bg-slate-950 border-slate-700 text-white"
                         />
                       </div>
                     </div>
@@ -142,7 +168,7 @@ const OrderForm: React.FC = () => {
                         value={formData.userNickname}
                         onChange={(e) => setFormData({ ...formData, userNickname: e.target.value })}
                         placeholder="Your in-game name"
-                        className="bg-slate-800 border-slate-700 text-white"
+                        className="h-12 rounded-xl bg-slate-950 border-slate-700 text-white"
                       />
                     </div>
 
@@ -158,7 +184,7 @@ const OrderForm: React.FC = () => {
                           value={formData.userEmail}
                           onChange={(e) => setFormData({ ...formData, userEmail: e.target.value })}
                           placeholder="your@email.com"
-                          className={`bg-slate-800 border-slate-700 text-white ${
+                          className={`h-12 rounded-xl bg-slate-950 border-slate-700 text-white ${
                             errors.userEmail ? 'border-red-500' : ''
                           }`}
                         />
@@ -178,7 +204,7 @@ const OrderForm: React.FC = () => {
                           value={formData.userPhone}
                           onChange={(e) => setFormData({ ...formData, userPhone: e.target.value })}
                           placeholder="+60 12-345 6789"
-                          className={`bg-slate-800 border-slate-700 text-white ${
+                          className={`h-12 rounded-xl bg-slate-950 border-slate-700 text-white ${
                             errors.userPhone ? 'border-red-500' : ''
                           }`}
                         />
@@ -202,7 +228,7 @@ const OrderForm: React.FC = () => {
 
             {/* Order Summary */}
             <div>
-              <Card className="sticky top-24 rounded-2xl border-slate-800 bg-slate-900/60 shadow-xl shadow-slate-950/20">
+              <Card className="sticky top-24 rounded-3xl border-slate-800 bg-slate-900/70 shadow-xl shadow-slate-950/20">
                 <CardHeader>
                   <CardTitle className="text-white text-lg">Order Summary</CardTitle>
                 </CardHeader>

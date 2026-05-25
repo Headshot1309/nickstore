@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, Upload, MessageCircle } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Clock3, MessageCircle, ShieldCheck, Upload, WalletCards } from 'lucide-react';
 import Navbar from '@/components/public/Navbar';
 import Footer from '@/components/public/Footer';
 import { PaymentMethodCard } from '@/components/public/PaymentMethodCard';
@@ -10,6 +10,7 @@ import { useCreateOrder } from '@/hooks/useOrders';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
+import type { PaymentMethod } from '@/types';
 
 const Payment: React.FC = () => {
   const location = useLocation();
@@ -18,7 +19,7 @@ const Payment: React.FC = () => {
   const { paymentMethods, loading: methodsLoading } = usePaymentMethods();
   const { createOrder, loading: creatingOrder } = useCreateOrder();
 
-  const [selectedMethod, setSelectedMethod] = useState<any>(null);
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string>('');
   const [error, setError] = useState<string>('');
@@ -85,9 +86,9 @@ const Payment: React.FC = () => {
       } else {
         throw new Error('Order creation failed');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error creating order:', err);
-      setError(err.message || 'Failed to create order. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to create order. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -123,11 +124,43 @@ const Payment: React.FC = () => {
 
           <StepProgress currentStep={2} />
 
+          <div className="mb-6 rounded-3xl border border-slate-800 bg-slate-900/55 p-5 shadow-xl shadow-slate-950/20">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-violet-300">Secure checkout</p>
+                <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Pay, upload proof, and track delivery.</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+                  Choose your payment method, upload a receipt, and we will send the order to the admin queue immediately.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs text-slate-400 md:min-w-80">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+                  <WalletCards className="mx-auto mb-2 h-5 w-5 text-violet-300" />
+                  Payment
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+                  <Upload className="mx-auto mb-2 h-5 w-5 text-cyan-300" />
+                  Receipt
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+                  <Clock3 className="mx-auto mb-2 h-5 w-5 text-emerald-300" />
+                  Processing
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
             {/* Payment Methods */}
             <div className="lg:col-span-2 space-y-6">
               <div>
-                <h2 className="text-xl font-semibold text-white mb-4">Select Payment Method</h2>
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <h2 className="text-xl font-semibold text-white">Select Payment Method</h2>
+                  <div className="hidden items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-300 sm:flex">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Admin notified on order
+                  </div>
+                </div>
                 
                 {methodsLoading ? (
                   <div className="flex items-center justify-center py-12">
@@ -174,7 +207,7 @@ const Payment: React.FC = () => {
               )}
 
               {/* Receipt Upload */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl shadow-slate-950/20 sm:p-6">
+              <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-slate-950/20 sm:p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">Upload Payment Receipt</h3>
                 
                 {receiptPreview ? (
@@ -198,7 +231,7 @@ const Payment: React.FC = () => {
                 ) : (
                   <label className="flex h-40 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700 px-4 text-center transition-colors hover:border-violet-500 hover:bg-slate-800/30">
                     <Upload className="w-10 h-10 text-slate-500 mb-2" />
-                    <span className="text-slate-400">Click to upload receipt</span>
+                    <span className="text-slate-300">Click to upload receipt</span>
                     <span className="text-slate-500 text-sm mt-1">JPG, PNG up to 5MB</span>
                     <input
                       type="file"
@@ -231,7 +264,7 @@ const Payment: React.FC = () => {
 
             {/* Order Summary */}
             <div>
-              <div className="sticky top-24 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl shadow-slate-950/20 sm:p-6">
+              <div className="sticky top-24 rounded-3xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-slate-950/20 sm:p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">Order Summary</h3>
                 
                 <div className="space-y-3 mb-4">

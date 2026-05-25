@@ -13,6 +13,91 @@ const dbName = 'gaming_store';
 
 let db;
 
+const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
+const telegramChatId = process.env.TELEGRAM_CHAT_ID;
+
+const escapeTelegramHtml = (value) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+const formatCurrency = (amount) => {
+  const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return `RM ${(numericAmount || 0).toFixed(2)}`;
+};
+
+const formatOrderDate = (dateValue) => {
+  try {
+    return new Date(dateValue || Date.now()).toLocaleString('en-MY', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return String(dateValue || '');
+  }
+};
+
+const buildTelegramOrderMessage = (order) => {
+  const optionalLines = [
+    order.user_game_server ? `<b>Server:</b> ${escapeTelegramHtml(order.user_game_server)}` : '',
+    order.user_nickname ? `<b>Nickname:</b> ${escapeTelegramHtml(order.user_nickname)}` : '',
+    order.user_email ? `<b>Email:</b> ${escapeTelegramHtml(order.user_email)}` : '',
+    order.user_phone ? `<b>Phone:</b> ${escapeTelegramHtml(order.user_phone)}` : '',
+    order.admin_notes ? `<b>Note:</b> ${escapeTelegramHtml(order.admin_notes)}` : '',
+  ].filter(Boolean);
+
+  return [
+    '<b>NEW ORDER RECEIVED</b>',
+    '',
+    '<b>Order Details</b>',
+    `Order #: <code>${escapeTelegramHtml(order.order_number)}</code>`,
+    `<b>Game:</b> ${escapeTelegramHtml(order.game_name)}`,
+    `<b>Product:</b> ${escapeTelegramHtml(order.product_name)}`,
+    order.denomination ? `<b>Denomination:</b> ${escapeTelegramHtml(order.denomination)}` : '',
+    `<b>Total:</b> ${escapeTelegramHtml(formatCurrency(order.total_amount))}`,
+    `<b>Payment:</b> ${escapeTelegramHtml(order.payment_method_name)}`,
+    `<b>Status:</b> ${escapeTelegramHtml(order.status || 'pending')}`,
+    `<b>Date:</b> ${escapeTelegramHtml(formatOrderDate(order.created_at))}`,
+    '',
+    '<b>Customer Details</b>',
+    `<b>Game ID:</b> <code>${escapeTelegramHtml(order.user_game_id)}</code>`,
+    ...optionalLines,
+    '',
+    '<a href="https://nickstore-iota.vercel.app/admin/orders">Open admin orders</a>',
+  ].filter(Boolean).join('\n');
+};
+
+const sendTelegramOrderNotification = async (order) => {
+  if (!telegramBotToken || !telegramChatId) {
+    console.warn('Telegram notification skipped: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID');
+    return { ok: false, skipped: true };
+  }
+
+  const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: telegramChatId,
+      text: buildTelegramOrderMessage(order),
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!data.ok) {
+    console.error('Telegram notification failed:', data);
+  }
+
+  return data;
+};
+
 async function connectDB() {
   if (db) return db;
 
@@ -170,9 +255,51 @@ app.post('/api/orders', async (req, res) => {
   try {
     const data = { ...req.body, created_at: new Date(), updated_at: new Date() };
     const result = await db.collection('orders').insertOne(data);
-    res.json({ ...data, $id: result.insertedId.toString() });
+    const order = { ...data, $id: result.insertedId.toString() };
+
+    sendTelegramOrderNotification(order).catch((error) => {
+      console.error('Telegram order notification error:', error);
+    });
+
+    res.json(order);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/telegram/test-order', async (req, res) => {
+  try {
+    const note = req.body?.note || 'testing bot';
+    const sampleOrder = {
+      order_number: `TEST-${Date.now()}`,
+      game_name: 'NickStore Test',
+      product_name: 'Trial Order Notification',
+      denomination: 'Testing package',
+      total_amount: 0,
+      payment_method_name: 'Test payment',
+      status: 'pending',
+      user_game_id: 'TESTING-BOT',
+      user_game_server: 'Demo server',
+      user_nickname: 'Testing Bot',
+      user_email: '',
+      user_phone: '',
+      admin_notes: note,
+      created_at: new Date(),
+    };
+
+    const telegramResult = await sendTelegramOrderNotification(sampleOrder);
+
+    if (!telegramResult.ok) {
+      return res.status(500).json({
+        success: false,
+        message: telegramResult.description || 'Telegram notification failed',
+        telegramResult,
+      });
+    }
+
+    res.json({ success: true, telegramResult });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

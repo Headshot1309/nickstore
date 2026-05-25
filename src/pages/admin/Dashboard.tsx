@@ -34,7 +34,6 @@ import {
   Cell,
 } from 'recharts';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
-import { sendTestTelegramMessage } from '@/lib/telegram';
 
 interface ChartDataPoint {
   name: string;
@@ -74,13 +73,24 @@ const Dashboard: React.FC = () => {
 
   const handleTestTelegram = async () => {
     setSendingTest(true);
-    const success = await sendTestTelegramMessage();
-    if (success) {
-      alert('✅ Test message sent to Telegram!');
-    } else {
-      alert('❌ Failed to send test message. Check console for details.');
+    try {
+      const response = await fetch('/api/telegram/test-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: 'testing bot' }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to send test message.');
+      }
+
+      alert('Test order sent to Telegram.');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to send test message.');
+    } finally {
+      setSendingTest(false);
     }
-    setSendingTest(false);
   };
 
   const recentOrders = orders.slice(0, 5);
