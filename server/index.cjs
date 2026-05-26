@@ -8,6 +8,8 @@ const { marketCatalogGames, marketCatalogProducts } = require('./catalog-seed.cj
 const app = express();
 const port = 3001;
 
+app.disable('x-powered-by');
+
 const allowedOrigins = new Set([
   'https://nickstore-iota.vercel.app',
   'https://nickstore-headshot1309-8399s-projects.vercel.app',
