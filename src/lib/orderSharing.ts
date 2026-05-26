@@ -1,6 +1,6 @@
 import type { Order } from '@/types';
 
-const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || '60137345871';
+const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || '60197661697';
 
 const formatCurrency = (amount: number | string) => {
   const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;

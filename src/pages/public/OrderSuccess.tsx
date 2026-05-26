@@ -131,7 +131,7 @@ const OrderSuccess: React.FC = () => {
     return `RM ${numericAmount.toFixed(2)}`;
   };
 
-  const whatsappNumber = '60137345871';
+  const whatsappNumber = '60197661697';
   const whatsappMessage = order 
     ? `Hi, I'm inquiring about my order *${order.order_number}* (Status: ${order.status}).`
     : `Hi, I just placed order *${orderNumber}*. Please process it ASAP.`;

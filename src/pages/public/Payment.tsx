@@ -164,7 +164,7 @@ const Payment: React.FC = () => {
     }
   };
 
-  const whatsappNumber = '60137345871';
+  const whatsappNumber = '60197661697';
   const whatsappMessage = 'Hi, I need assistance with my order.';
   const whatsappLink = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`;
 
