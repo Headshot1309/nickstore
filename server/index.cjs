@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { Blob } = require('buffer');
 const { MongoClient, ObjectId } = require('mongodb');
 const nodemailer = require('nodemailer');
@@ -47,6 +48,7 @@ const createRateLimiter = ({ windowMs, max, keyPrefix }) => (req, res, next) => 
 
 const authRateLimit = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 20, keyPrefix: 'auth' });
 const orderRateLimit = createRateLimiter({ windowMs: 60 * 1000, max: 12, keyPrefix: 'order' });
+const customerAuthRateLimit = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 12, keyPrefix: 'customer-auth' });
 
 app.set('trust proxy', 1);
 app.use(cors({
@@ -97,6 +99,15 @@ const hashAdminCode = (code, challengeId) =>
 
 const createVerificationCode = () => String(crypto.randomInt(100000, 1000000));
 
+const safeString = (value, maxLength = 500) => {
+  if (typeof value !== 'string' && typeof value !== 'number') return '';
+  return String(value).trim().slice(0, maxLength);
+};
+
+const normalizeEmail = (value) => safeString(value, 254).toLowerCase();
+
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
 const sendAdminVerificationEmail = async (code) => {
   if (!hasSmtpConfig()) {
     throw new Error('Email 2FA is enabled but SMTP email is not configured');
@@ -118,6 +129,30 @@ const sendAdminVerificationEmail = async (code) => {
     subject: 'NickStore admin login code',
     text: `Your NickStore admin verification code is ${code}. It expires in 10 minutes.`,
     html: `<p>Your NickStore admin verification code is <strong>${code}</strong>.</p><p>It expires in 10 minutes.</p>`,
+  });
+};
+
+const sendVerificationEmail = async ({ to, subject, title, code, extraText = '' }) => {
+  if (!hasSmtpConfig()) {
+    throw new Error('SMTP email is not configured');
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: smtpConfig.host,
+    port: smtpConfig.port,
+    secure: smtpConfig.port === 465,
+    auth: {
+      user: smtpConfig.user,
+      pass: smtpConfig.pass,
+    },
+  });
+
+  await transporter.sendMail({
+    from: smtpConfig.from,
+    to,
+    subject,
+    text: `${title}: ${code}. This code expires in 10 minutes. ${extraText}`.trim(),
+    html: `<p>${escapeTelegramHtml(title)}: <strong>${escapeTelegramHtml(code)}</strong></p><p>This code expires in 10 minutes.</p>${extraText ? `<p>${escapeTelegramHtml(extraText)}</p>` : ''}`,
   });
 };
 
@@ -246,6 +281,9 @@ const isSupplierPricelistProduct = (product) =>
 const hashAdminSessionToken = (token) =>
   crypto.createHash('sha256').update(`${token}:${adminPassword || ''}`).digest('hex');
 
+const hashCustomerSessionToken = (token) =>
+  crypto.createHash('sha256').update(`${token}:${process.env.CUSTOMER_SESSION_SECRET || adminPassword || 'nickstore'}`).digest('hex');
+
 const createAdminSession = async () => {
   const database = await getDb();
   const token = crypto.randomBytes(32).toString('hex');
@@ -266,6 +304,99 @@ const getBearerToken = (req) => {
   const header = req.headers.authorization || '';
   const match = /^Bearer\s+(.+)$/i.exec(header);
   return match?.[1] || '';
+};
+
+const sanitizeCustomer = (customer) => ({
+  $id: customer._id.toString(),
+  name: customer.name,
+  email: customer.email,
+  phone: customer.phone || '',
+  created_at: customer.created_at,
+});
+
+const createCustomerSession = async (customerId) => {
+  const database = await getDb();
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = new Date();
+
+  await database.collection('customer_sessions').insertOne({
+    tokenHash: hashCustomerSessionToken(token),
+    customer_id: customerId,
+    createdAt: now,
+    lastActivityAt: now,
+    expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+  });
+
+  return token;
+};
+
+const createCustomerChallenge = async ({ customerId, email, purpose, nextPasswordHash = '' }) => {
+  const database = await getDb();
+  const challengeId = crypto.randomUUID();
+  const code = createVerificationCode();
+  const now = new Date();
+
+  await database.collection('customer_2fa_challenges').insertOne({
+    challengeId,
+    customer_id: customerId,
+    email,
+    purpose,
+    codeHash: hashAdminCode(code, challengeId),
+    nextPasswordHash,
+    used: false,
+    createdAt: now,
+    expiresAt: new Date(now.getTime() + 10 * 60 * 1000),
+  });
+
+  await sendVerificationEmail({
+    to: email,
+    subject: purpose === 'reset' ? 'NickStore password reset code' : 'NickStore login code',
+    title: purpose === 'reset' ? 'Your NickStore password reset code' : 'Your NickStore verification code',
+    code,
+  });
+
+  return challengeId;
+};
+
+const getCustomerToken = (req) => safeString(req.headers['x-customer-session'], 256);
+
+const getCustomerSessionFromRequest = async (req) => {
+  const token = getCustomerToken(req);
+  if (!token) return null;
+
+  const database = await getDb();
+  const now = new Date();
+  const session = await database.collection('customer_sessions').findOne({
+    tokenHash: hashCustomerSessionToken(token),
+    expiresAt: { $gt: now },
+  });
+
+  if (!session) return null;
+
+  await database.collection('customer_sessions').updateOne(
+    { _id: session._id },
+    {
+      $set: {
+        lastActivityAt: now,
+        expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+      },
+    }
+  );
+
+  return session;
+};
+
+const requireCustomer = async (req, res, next) => {
+  try {
+    const session = await getCustomerSessionFromRequest(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: 'Please sign in again.' });
+    }
+    req.customerSession = session;
+    next();
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 const getAdminSessionFromRequest = async (req) => {
@@ -328,6 +459,15 @@ const sanitizePublicProduct = (doc) => ({
   updated_at: doc.updated_at,
 });
 
+const normalizePopularRows = (rows = []) =>
+  rows.map((row, index) => ({
+    rank: index + 1,
+    game_id: String(row._id?.game_id || row.game_id || ''),
+    game_name: String(row._id?.game_name || row.game_name || 'Unknown Game'),
+    order_count: Number(row.order_count || 0),
+    total_spend: Number(row.total_spend || 0),
+  }));
+
 const gameLogoPalettes = [
   ['#7c3aed', '#06b6d4'],
   ['#dc2626', '#f97316'],
@@ -385,9 +525,18 @@ const withGameLogo = (doc) => ({
 });
 
 const sanitizeOrder = (doc) => ({
-  ...doc,
   $id: doc._id.toString(),
-  receipt_image_url: doc.receipt_image_url ? undefined : doc.receipt_image_url,
+  order_number: doc.order_number,
+  game_name: doc.game_name,
+  product_name: doc.product_name,
+  denomination: doc.denomination,
+  status: doc.status,
+  total_amount: doc.total_amount,
+  quantity: doc.quantity,
+  user_game_id: doc.user_game_id,
+  user_game_server: doc.user_game_server,
+  created_at: doc.created_at,
+  updated_at: doc.updated_at,
 });
 
 const formatOrderDate = (dateValue) => {
@@ -547,10 +696,11 @@ const getDb = async () => db || connectDB();
 
 // Helper function
 const toObjectId = (id) => {
+  const value = safeString(id, 80);
   try {
-    return new ObjectId(id);
+    return new ObjectId(value);
   } catch {
-    return id;
+    return value;
   }
 };
 
@@ -665,6 +815,27 @@ app.get('/api/settings/public', async (_req, res) => {
     res.json({
       receipt_checker_enabled: await getReceiptCheckerEnabled(),
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/stats/popular-games', async (_req, res) => {
+  try {
+    const database = await getDb();
+    const rows = await database.collection('orders').aggregate([
+      {
+        $group: {
+          _id: { game_id: '$game_id', game_name: '$game_name' },
+          order_count: { $sum: 1 },
+          total_spend: { $sum: { $convert: { input: '$total_amount', to: 'double', onError: 0, onNull: 0 } } },
+        },
+      },
+      { $sort: { order_count: -1, total_spend: -1 } },
+      { $limit: 5 },
+    ]).toArray();
+
+    res.json({ documents: normalizePopularRows(rows), total: rows.length });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -1157,13 +1328,18 @@ app.get('/api/orders', async (req, res) => {
   try {
     const database = await getDb();
     const isAdmin = Boolean(await getAdminSessionFromRequest(req));
-    const orderNumber = String(req.query.order_number || '').trim();
+    const customerSession = await getCustomerSessionFromRequest(req);
+    const orderNumber = safeString(req.query.order_number, 80);
 
-    if (!isAdmin && !orderNumber) {
+    if (!isAdmin && !customerSession && !orderNumber) {
       return res.json({ documents: [] });
     }
 
-    const query = orderNumber ? { order_number: orderNumber } : {};
+    const query = orderNumber
+      ? { order_number: orderNumber }
+      : customerSession
+        ? { customer_id: customerSession.customer_id }
+        : {};
     const orders = await database.collection('orders').find(query).sort({ created_at: -1 }).toArray();
     res.json({
       documents: orders.map((doc) => isAdmin ? ({ ...doc, $id: doc._id.toString() }) : sanitizeOrder(doc)),
@@ -1176,6 +1352,7 @@ app.get('/api/orders', async (req, res) => {
 app.post('/api/orders', orderRateLimit, async (req, res) => {
   try {
     const database = await getDb();
+    const customerSession = await getCustomerSessionFromRequest(req);
     const product = await database.collection('products').findOne({
       _id: toObjectId(req.body.product_id),
       is_active: true,
@@ -1188,6 +1365,12 @@ app.post('/api/orders', orderRateLimit, async (req, res) => {
     const quantity = Math.max(1, Number.parseInt(req.body.quantity, 10) || 1);
     const unitPrice = Number(product.price || 0);
     const totalAmount = Number((unitPrice * quantity).toFixed(2));
+    const userGameId = safeString(req.body.user_game_id, 80);
+
+    if (!userGameId) {
+      return res.status(400).json({ success: false, message: 'Game ID is required.' });
+    }
+
     const receiptValidation = req.body.receipt_validation
       ? {
           ...req.body.receipt_validation,
@@ -1196,7 +1379,7 @@ app.post('/api/orders', orderRateLimit, async (req, res) => {
         }
       : undefined;
     const data = {
-      ...req.body,
+      customer_id: customerSession?.customer_id || null,
       order_number: generateOrderNumber(),
       game_id: product.game_id,
       game_name: product.game_name,
@@ -1208,6 +1391,15 @@ app.post('/api/orders', orderRateLimit, async (req, res) => {
       price: String(unitPrice),
       quantity: String(quantity),
       total_amount: String(totalAmount),
+      user_game_id: userGameId,
+      user_game_server: safeString(req.body.user_game_server, 80),
+      user_nickname: safeString(req.body.user_nickname, 80),
+      user_email: normalizeEmail(req.body.user_email),
+      user_phone: safeString(req.body.user_phone, 30),
+      payment_method: safeString(req.body.payment_method, 80),
+      receipt_image_id: safeString(req.body.receipt_image_id, 120),
+      receipt_image_url: safeString(req.body.receipt_image_url, 12_000_000),
+      status: 'pending',
       receipt_validation: receiptValidation,
       created_at: new Date(),
       updated_at: new Date(),
@@ -1263,6 +1455,225 @@ app.post('/api/auth/verify-2fa', authRateLimit, async (req, res) => {
       session_token: sessionToken,
       user: { $id: 'admin1', id: 'admin1', email: adminEmail, name: 'Admin' },
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/customer/register', customerAuthRateLimit, async (req, res) => {
+  try {
+    const database = await getDb();
+    const name = safeString(req.body.name, 80);
+    const email = normalizeEmail(req.body.email);
+    const phone = safeString(req.body.phone, 30);
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+
+    if (!name || !isValidEmail(email) || password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Enter a name, valid email, and password with at least 8 characters.' });
+    }
+
+    const existing = await database.collection('customers').findOne({ email });
+    if (existing) {
+      return res.status(409).json({ success: false, message: 'An account already exists with this email.' });
+    }
+
+    const now = new Date();
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await database.collection('customers').insertOne({
+      name,
+      email,
+      phone,
+      passwordHash,
+      created_at: now,
+      updated_at: now,
+    });
+    const customer = { _id: result.insertedId, name, email, phone, created_at: now };
+    const sessionToken = await createCustomerSession(result.insertedId);
+
+    res.json({ success: true, customer: sanitizeCustomer(customer), session_token: sessionToken });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/customer/login', customerAuthRateLimit, async (req, res) => {
+  try {
+    const database = await getDb();
+    const email = normalizeEmail(req.body.email);
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+
+    if (!isValidEmail(email) || !password) {
+      return res.status(400).json({ success: false, message: 'Enter a valid email and password.' });
+    }
+
+    const customer = await database.collection('customers').findOne({ email });
+    if (!customer || !(await bcrypt.compare(password, customer.passwordHash || ''))) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+    }
+
+    const challengeId = await createCustomerChallenge({
+      customerId: customer._id,
+      email: customer.email,
+      purpose: 'login',
+    });
+    res.json({
+      success: true,
+      requires_2fa: true,
+      challenge_id: challengeId,
+      message: 'Verification code sent to your email.',
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/customer/verify-login', customerAuthRateLimit, async (req, res) => {
+  try {
+    const database = await getDb();
+    const challengeId = safeString(req.body.challenge_id, 80);
+    const code = safeString(req.body.code, 12);
+
+    const challenge = await database.collection('customer_2fa_challenges').findOne({
+      challengeId,
+      purpose: 'login',
+      used: false,
+    });
+
+    if (!challenge || new Date(challenge.expiresAt).getTime() < Date.now() || challenge.codeHash !== hashAdminCode(code, challengeId)) {
+      return res.status(401).json({ success: false, message: 'Verification code expired or invalid.' });
+    }
+
+    const customer = await database.collection('customers').findOne({ _id: challenge.customer_id });
+    if (!customer) {
+      return res.status(404).json({ success: false, message: 'Account not found.' });
+    }
+
+    await database.collection('customer_2fa_challenges').updateOne({ _id: challenge._id }, { $set: { used: true, usedAt: new Date() } });
+    const sessionToken = await createCustomerSession(customer._id);
+    res.json({ success: true, customer: sanitizeCustomer(customer), session_token: sessionToken });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/customer/forgot-password', customerAuthRateLimit, async (req, res) => {
+  try {
+    const database = await getDb();
+    const email = normalizeEmail(req.body.email);
+    const newPassword = typeof req.body.password === 'string' ? req.body.password : '';
+
+    if (!isValidEmail(email) || newPassword.length < 8) {
+      return res.status(400).json({ success: false, message: 'Enter your email and a new password with at least 8 characters.' });
+    }
+
+    const customer = await database.collection('customers').findOne({ email });
+    if (!customer) {
+      return res.json({ success: true, message: 'If the account exists, a reset code has been sent.' });
+    }
+
+    const nextPasswordHash = await bcrypt.hash(newPassword, 12);
+    const challengeId = await createCustomerChallenge({
+      customerId: customer._id,
+      email: customer.email,
+      purpose: 'reset',
+      nextPasswordHash,
+    });
+
+    res.json({ success: true, requires_2fa: true, challenge_id: challengeId, message: 'Reset code sent to your email.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/customer/reset-password', customerAuthRateLimit, async (req, res) => {
+  try {
+    const database = await getDb();
+    const challengeId = safeString(req.body.challenge_id, 80);
+    const code = safeString(req.body.code, 12);
+    const challenge = await database.collection('customer_2fa_challenges').findOne({
+      challengeId,
+      purpose: 'reset',
+      used: false,
+    });
+
+    if (!challenge || new Date(challenge.expiresAt).getTime() < Date.now() || challenge.codeHash !== hashAdminCode(code, challengeId) || !challenge.nextPasswordHash) {
+      return res.status(401).json({ success: false, message: 'Reset code expired or invalid.' });
+    }
+
+    await database.collection('customers').updateOne(
+      { _id: challenge.customer_id },
+      { $set: { passwordHash: challenge.nextPasswordHash, updated_at: new Date() } }
+    );
+    await database.collection('customer_2fa_challenges').updateOne({ _id: challenge._id }, { $set: { used: true, usedAt: new Date() } });
+    await database.collection('customer_sessions').deleteMany({ customer_id: challenge.customer_id });
+
+    res.json({ success: true, message: 'Password updated. Please sign in again.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/auth/forgot-password', authRateLimit, async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    if (email !== adminEmail.toLowerCase()) {
+      return res.json({ success: true, message: 'If the email matches the admin account, reset instructions have been sent.' });
+    }
+
+    await sendVerificationEmail({
+      to: adminEmail,
+      subject: 'NickStore admin password reset instructions',
+      title: 'NickStore admin password reset',
+      code: 'VERCEL-ENV',
+      extraText: 'Admin password is stored in Vercel Environment Variables. Update ADMIN_PASSWORD in Vercel, redeploy, then sign in with the new password.',
+    });
+
+    res.json({ success: true, message: 'Reset instructions sent to the configured admin email.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/customer/me', requireCustomer, async (req, res) => {
+  try {
+    const database = await getDb();
+    const customer = await database.collection('customers').findOne({ _id: req.customerSession.customer_id });
+    if (!customer) {
+      return res.status(404).json({ success: false, message: 'Account not found.' });
+    }
+    res.json({ success: true, customer: sanitizeCustomer(customer) });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/customer/stats', requireCustomer, async (req, res) => {
+  try {
+    const database = await getDb();
+    const rows = await database.collection('orders').aggregate([
+      { $match: { customer_id: req.customerSession.customer_id } },
+      {
+        $group: {
+          _id: { game_id: '$game_id', game_name: '$game_name' },
+          order_count: { $sum: 1 },
+          total_spend: { $sum: { $convert: { input: '$total_amount', to: 'double', onError: 0, onNull: 0 } } },
+        },
+      },
+      { $sort: { order_count: -1, total_spend: -1 } },
+      { $limit: 5 },
+    ]).toArray();
+
+    res.json({ documents: normalizePopularRows(rows), total: rows.length });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/customer/logout', requireCustomer, async (req, res) => {
+  try {
+    const database = await getDb();
+    await database.collection('customer_sessions').deleteOne({ _id: req.customerSession._id });
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

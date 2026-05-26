@@ -12,6 +12,14 @@ export interface Game {
   updated_at?: string;
 }
 
+export interface Customer {
+  $id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  created_at?: string;
+}
+
 export interface Product {
   $id?: string;
   game_id: string;

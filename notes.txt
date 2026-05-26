@@ -53,6 +53,9 @@ Variables:
 - ADMIN_EMAIL controls the admin login email.
 - ADMIN_PASSWORD controls the admin login password.
 - ADMIN_2FA_ENABLED=true turns email 2FA on.
+- SMTP_USER should be nickstore642@gmail.com if you want NickStore Gmail to send login/reset codes.
+- SMTP_PASS must be a Gmail App Password, not the normal Gmail password.
+- SMTP_FROM can be NickStore <nickstore642@gmail.com>.
 
 After changing:
 1. Redeploy in Vercel.
@@ -531,6 +534,13 @@ If admin cannot log in:
 - If 2FA email is broken, set ADMIN_2FA_ENABLED=false temporarily.
 - Redeploy.
 
+If email 2FA/reset code does not send:
+- Check SMTP_HOST=smtp.gmail.com.
+- Check SMTP_PORT=587.
+- Check SMTP_USER=nickstore642@gmail.com.
+- Check SMTP_PASS is a Gmail App Password.
+- Redeploy after changing env vars.
+
 If Telegram order does not arrive:
 - Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.
 - Make sure you started the bot/chat.
@@ -553,4 +563,3 @@ If public products expose private data:
 If too many games/products show:
 - Run the prune-to-pricelist admin action or API.
 - Public only shows active games/products.
-

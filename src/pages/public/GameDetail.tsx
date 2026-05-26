@@ -10,12 +10,14 @@ import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import type { Product } from '@/types';
+import { useCustomer } from '@/contexts/CustomerContext';
 
 const GameDetail: React.FC = () => {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
   const { getGame } = useGames();
   const { products, loading: productsLoading } = useProducts(gameId);
+  const { isCustomerAuthenticated } = useCustomer();
   const [game, setGame] = useState<any>(null);
   const [gameLoading, setGameLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -58,6 +60,16 @@ const GameDetail: React.FC = () => {
         is_active: selectedProduct.is_active,
       };
       
+      if (!isCustomerAuthenticated) {
+        navigate('/login', {
+          state: {
+            redirectTo: '/order',
+            pendingOrder: { game: serializableGame, product: serializableProduct },
+          },
+        });
+        return;
+      }
+
       navigate('/order', {
         state: {
           game: serializableGame,

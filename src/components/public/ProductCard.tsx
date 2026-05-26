@@ -2,6 +2,7 @@ import React from 'react';
 import { Check, Gem, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Product } from '@/types';
+import { usePreference } from '@/contexts/PreferenceContext';
 
 interface ProductCardProps {
   product: Product;
@@ -18,6 +19,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   gameImageUrl,
   gameName,
 }) => {
+  const { formatMoney } = usePreference();
   const hasDiscount = product.original_price && product.original_price > product.price;
   const discountPercent = hasDiscount
     ? Math.round(((product.original_price! - product.price) / product.original_price!) * 100)
@@ -65,11 +67,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <div className="mt-auto flex flex-wrap items-end justify-between gap-3 pt-5">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="text-lg font-bold text-violet-400">
-            RM {product.price.toFixed(2)}
+            {formatMoney(product.price)}
           </span>
             {hasDiscount && (
               <span className="text-sm text-slate-500 line-through">
-                RM {product.original_price!.toFixed(2)}
+                {formatMoney(product.original_price!)}
               </span>
             )}
           </div>

@@ -25,6 +25,11 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   onUpdateStatus,
 }) => {
   const [copied, setCopied] = React.useState(false);
+  const [receiptPreviewFailed, setReceiptPreviewFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setReceiptPreviewFailed(false);
+  }, [order?.$id, order?.order_number]);
 
   if (!order) return null;
 
@@ -222,23 +227,28 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           {/* Receipt Image */}
           {order.receipt_image_url && (
             <div className="bg-slate-800/50 rounded-xl p-5 transition-all duration-300 hover:bg-slate-800/70">
-              <h4 className="text-sm font-medium text-white mb-3">Payment Receipt</h4>
-              <div className="relative group">
-                <img
-                  src={order.receipt_image_url}
-                  alt="Payment Receipt"
-                  className="max-w-full rounded-lg border border-slate-700 transition-all duration-300 group-hover:shadow-xl"
-                />
-                <a
-                  href={order.receipt_image_url}
-                  download
-                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                >
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h4 className="text-sm font-medium text-white">Payment Receipt</h4>
+                <a href={order.receipt_image_url} download={`receipt-${order.order_number}.jpg`}>
                   <Button variant="secondary" size="sm" className="gap-2 bg-slate-800/90 hover:bg-slate-700">
                     <Download className="w-4 h-4" />
                     Download
                   </Button>
                 </a>
+              </div>
+              <div className="relative group">
+                {!receiptPreviewFailed ? (
+                  <img
+                    src={order.receipt_image_url}
+                    alt="Payment Receipt"
+                    className="max-w-full rounded-lg border border-slate-700 transition-all duration-300 group-hover:shadow-xl"
+                    onError={() => setReceiptPreviewFailed(true)}
+                  />
+                ) : (
+                  <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-4 text-sm text-amber-100">
+                    Receipt preview could not render on this device. Use the download button above to open the receipt file.
+                  </div>
+                )}
               </div>
             </div>
           )}

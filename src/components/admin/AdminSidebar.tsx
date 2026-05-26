@@ -10,6 +10,7 @@ import {
   Menu,
   Sparkles,
   ChevronRight,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ className = '' }) =>
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+
+  const showInstallHelp = () => {
+    alert('To download the admin panel as an app: on Android/Chrome use Install App from the browser menu. On iPhone/iPad open Safari, tap Share, then Add to Home Screen.');
+  };
 
   const NavContent = () => (
     <>
@@ -90,6 +95,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ className = '' }) =>
       </nav>
 
       <div className="p-3 border-t border-slate-800 animate-fade-in-up animation-delay-200">
+        <Button
+          variant="ghost"
+          className="mb-2 w-full justify-start gap-3 text-slate-400 hover:bg-violet-500/10 hover:text-violet-300 transition-all duration-300"
+          onClick={showInstallHelp}
+        >
+          <Download className="w-5 h-5" />
+          <span>Download admin app</span>
+        </Button>
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-300 group"
@@ -162,6 +175,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ className = '' }) =>
                   })}
                 </nav>
                 <div className="p-3 border-t border-slate-800">
+                  <Button
+                    variant="ghost"
+                    className="mb-2 w-full justify-start gap-3 text-slate-400 hover:bg-violet-500/10 hover:text-violet-300 transition-all duration-300"
+                    onClick={showInstallHelp}
+                  >
+                    <Download className="w-5 h-5" />
+                    <span>Download admin app</span>
+                  </Button>
                   <Button
                     variant="ghost"
                     className="w-full justify-start gap-3 text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-300 group"

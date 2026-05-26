@@ -13,11 +13,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { useCustomer } from '@/contexts/CustomerContext';
 
 const OrderForm: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { game, product } = location.state || {};
+  const { customer } = useCustomer();
 
   const [formData, setFormData] = useState({
     userGameId: '',
@@ -27,6 +29,16 @@ const OrderForm: React.FC = () => {
     userPhone: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  React.useEffect(() => {
+    if (customer) {
+      setFormData((current) => ({
+        ...current,
+        userEmail: current.userEmail || customer.email || '',
+        userPhone: current.userPhone || customer.phone || '',
+      }));
+    }
+  }, [customer]);
 
   // Redirect if no game/product selected
   React.useEffect(() => {

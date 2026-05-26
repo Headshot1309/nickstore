@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -16,6 +16,9 @@ import Navbar from '@/components/public/Navbar';
 import Footer from '@/components/public/Footer';
 import { GameCard } from '@/components/public/GameCard';
 import { useGames } from '@/hooks/useGames';
+import { useCustomer } from '@/contexts/CustomerContext';
+import { statsCollection, type PopularGameStat } from '@/lib/mongodb';
+import { usePreference } from '@/contexts/PreferenceContext';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -46,11 +49,36 @@ const guarantees = [
 
 const Home: React.FC = () => {
   const { games, loading } = useGames();
+  const { customer } = useCustomer();
+  const { formatMoney } = usePreference();
+  const [selectedDeskIndex, setSelectedDeskIndex] = useState(0);
+  const [globalPopular, setGlobalPopular] = useState<PopularGameStat[]>([]);
+  const [customerPopular, setCustomerPopular] = useState<PopularGameStat[]>([]);
 
   const heroGames = useMemo(() => {
     const availableGames = games.length > 0 ? games : featuredFallback;
     return availableGames.slice(0, 3);
   }, [games]);
+  const selectedDeskGame = heroGames[selectedDeskIndex] || heroGames[0];
+  const selectedDeskGameId = selectedDeskGame && '$id' in selectedDeskGame ? selectedDeskGame.$id : '';
+  const deskPackages = ['Starter pack', 'Best value', 'Instant bundle'];
+  const liveRanking = customerPopular.length > 0 ? customerPopular : globalPopular;
+
+  useEffect(() => {
+    statsCollection.popularGames()
+      .then((response) => setGlobalPopular(response.documents || []))
+      .catch(() => setGlobalPopular([]));
+  }, []);
+
+  useEffect(() => {
+    if (!customer) {
+      setCustomerPopular([]);
+      return;
+    }
+    statsCollection.customerPopularGames()
+      .then((response) => setCustomerPopular(response.documents || []))
+      .catch(() => setCustomerPopular([]));
+  }, [customer]);
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#020617] text-white">
@@ -119,7 +147,14 @@ const Home: React.FC = () => {
                 <div className="p-4 sm:p-5">
                   <div className="grid grid-cols-3 gap-3">
                     {heroGames.map((game, index) => (
-                      <div key={game.name} className={`${index === 0 ? 'col-span-2 row-span-2' : ''} overflow-hidden rounded-2xl border border-slate-800 bg-slate-900`}>
+                      <button
+                        key={game.name}
+                        type="button"
+                        onClick={() => setSelectedDeskIndex(index)}
+                        className={`${index === 0 ? 'col-span-2 row-span-2' : ''} relative overflow-hidden rounded-2xl border bg-slate-900 text-left transition hover:-translate-y-0.5 ${
+                          selectedDeskIndex === index ? 'border-violet-300 shadow-lg shadow-violet-950/30' : 'border-slate-800'
+                        }`}
+                      >
                         {game.image_url ? (
                           <img src={game.image_url} alt={game.name} className="h-full min-h-28 w-full object-cover" />
                         ) : (
@@ -127,7 +162,10 @@ const Home: React.FC = () => {
                             <Gamepad2 className="h-8 w-8 text-slate-700" />
                           </div>
                         )}
-                      </div>
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-3">
+                          <p className="text-xs font-semibold text-white">{game.name}</p>
+                        </div>
+                      </button>
                     ))}
                   </div>
 
@@ -135,9 +173,9 @@ const Home: React.FC = () => {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-sm text-slate-400">Selected package</p>
-                        <p className="mt-1 text-xl font-bold text-white">172 Diamonds</p>
+                        <p className="mt-1 text-xl font-bold text-white">{selectedDeskGame?.name || 'NickStore'} {deskPackages[selectedDeskIndex]}</p>
                       </div>
-                      <p className="rounded-full bg-violet-500 px-3 py-1 text-sm font-semibold text-white">RM 11.70</p>
+                      <p className="rounded-full bg-violet-500 px-3 py-1 text-sm font-semibold text-white">Live</p>
                     </div>
                     <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs text-slate-400">
                       {['Details', 'Payment', 'Processing'].map((label, index) => (
@@ -148,6 +186,39 @@ const Home: React.FC = () => {
                           {label}
                         </div>
                       ))}
+                    </div>
+                    <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+                      <div className="mb-3 flex items-center justify-between">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                          {customerPopular.length > 0 ? 'Your ranking' : 'Store ranking'}
+                        </p>
+                        <p className="text-xs text-slate-500">Top 5</p>
+                      </div>
+                      <div className="space-y-2">
+                        {(liveRanking.length > 0 ? liveRanking : heroGames.map((game, index) => ({
+                          rank: index + 1,
+                          game_id: '$id' in game ? game.$id || '' : '',
+                          game_name: game.name,
+                          order_count: 0,
+                          total_spend: 0,
+                        }))).slice(0, 5).map((row) => (
+                          <div key={`${row.rank}-${row.game_name}`} className="flex items-center justify-between gap-3 rounded-xl bg-slate-900/75 px-3 py-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-white">#{row.rank} {row.game_name}</p>
+                              <p className="text-xs text-slate-500">{row.order_count} orders</p>
+                            </div>
+                            <p className="shrink-0 text-sm font-bold text-emerald-300">{formatMoney(row.total_spend)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <Link to={selectedDeskGameId ? `/game/${selectedDeskGameId}` : '/games'}>
+                        <Button className="h-10 w-full bg-violet-500 text-white hover:bg-violet-400">Top up</Button>
+                      </Link>
+                      <Link to="/account">
+                        <Button variant="outline" className="h-10 w-full border-slate-700 bg-slate-950/60 text-slate-200 hover:bg-slate-800">Account</Button>
+                      </Link>
                     </div>
                   </div>
                 </div>
@@ -203,7 +274,7 @@ const Home: React.FC = () => {
             <div className="mb-10 flex items-end justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-violet-300">Catalog</p>
-                <h2 className="mt-3 text-3xl font-bold text-white sm:text-4xl">Popular top-ups</h2>
+                <h2 className="mt-3 text-3xl font-bold text-white sm:text-4xl">Popular top-ups ranked 1-5</h2>
               </div>
               <Link to="/games" className="hidden items-center gap-2 text-sm font-semibold text-violet-300 transition-colors hover:text-violet-200 sm:flex">
                 View all games
@@ -218,9 +289,22 @@ const Home: React.FC = () => {
             ) : games.length === 0 ? (
               <EmptyState title="No games available" description="Check back later for new games!" />
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
-                {games.slice(0, 8).map((game) => (
-                  <GameCard key={game.$id} game={game} />
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:gap-4">
+                {(globalPopular.length > 0
+                  ? globalPopular.map((row) => games.find((game) => game.$id === row.game_id || game.name === row.game_name)).filter(Boolean)
+                  : games.slice(0, 5)
+                ).slice(0, 5).map((game, index) => (
+                  <div key={game!.$id || game!.name} className="relative">
+                    <div className="absolute left-3 top-3 z-10 rounded-full bg-violet-500 px-3 py-1 text-xs font-black text-white shadow-lg">
+                      #{index + 1}
+                    </div>
+                    <GameCard game={game!} />
+                    {globalPopular[index] && (
+                      <div className="mt-2 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-400">
+                        {globalPopular[index].order_count} orders - {formatMoney(globalPopular[index].total_spend)} spent
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             )}

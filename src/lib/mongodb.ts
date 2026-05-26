@@ -5,10 +5,23 @@ interface ApiListResponse<T = any> {
   total?: number;
 }
 
+export interface PopularGameStat {
+  rank: number;
+  game_id: string;
+  game_name: string;
+  order_count: number;
+  total_spend: number;
+}
+
 interface StoredAdminSession {
   user: { $id: string; email: string; name: string };
   token: string;
   lastActivityAt: number;
+}
+
+interface StoredCustomerSession {
+  customer: { $id: string; email: string; name: string; phone?: string };
+  token: string;
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -87,6 +100,7 @@ const fallbackPaymentMethods = [
 
 const localOrdersKey = 'nickstore_orders';
 const adminSessionKey = 'adminSession';
+const customerSessionKey = 'nickstoreCustomerSession';
 const ADMIN_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 const readLocalOrders = () => {
@@ -111,12 +125,26 @@ const readAdminSession = (): StoredAdminSession | null => {
   }
 };
 
+const readCustomerSession = (): StoredCustomerSession | null => {
+  try {
+    const session = localStorage.getItem(customerSessionKey);
+    return session ? JSON.parse(session) : null;
+  } catch {
+    localStorage.removeItem(customerSessionKey);
+    return null;
+  }
+};
+
 export const apiRequest = async <T>(path: string, options?: RequestInit): Promise<T> => {
   const adminSession = readAdminSession();
+  const customerSession = readCustomerSession();
   const headers = new Headers(options?.headers);
   headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
   if (adminSession?.token) {
     headers.set('Authorization', `Bearer ${adminSession.token}`);
+  }
+  if (customerSession?.token) {
+    headers.set('X-Customer-Session', customerSession.token);
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -214,6 +242,10 @@ const saveAdminSession = (user: { $id: string; email: string; name: string }, to
   }));
 };
 
+const saveCustomerSession = (customer: { $id: string; email: string; name: string; phone?: string }, token: string) => {
+  localStorage.setItem(customerSessionKey, JSON.stringify({ customer, token }));
+};
+
 export const touchAdminSession = () => {
   const session = localStorage.getItem(adminSessionKey);
   if (!session) return;
@@ -237,6 +269,13 @@ export const settingsCollection = {
       success: true,
       receipt_checker_enabled: enabled,
     })),
+};
+
+export const statsCollection = {
+  popularGames: async () =>
+    apiRequest<ApiListResponse<PopularGameStat>>('/api/stats/popular-games'),
+  customerPopularGames: async () =>
+    apiRequest<ApiListResponse<PopularGameStat>>('/api/customer/stats'),
 };
 
 export const ordersCollection = {
@@ -383,6 +422,70 @@ export const account = {
   },
   deleteSession: async (_sessionId: string) => {
     localStorage.removeItem(adminSessionKey);
+    return { success: true };
+  },
+};
+
+export const customerAccount = {
+  get: async () => {
+    const stored = readCustomerSession();
+    if (!stored?.token) throw new Error('No customer session');
+    const response = await apiRequest<{ success: boolean; customer: StoredCustomerSession['customer'] }>('/api/customer/me');
+    saveCustomerSession(response.customer, stored.token);
+    return response.customer;
+  },
+  register: async (data: { name: string; email: string; phone?: string; password: string }) => {
+    const response = await apiRequest<{ success: boolean; customer: StoredCustomerSession['customer']; session_token: string }>('/api/customer/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    saveCustomerSession(response.customer, response.session_token);
+    return response.customer;
+  },
+  login: async (email: string, password: string) => {
+    const response = await apiRequest<{ success: boolean; customer?: StoredCustomerSession['customer']; session_token?: string; requires_2fa?: boolean; challenge_id?: string; message?: string }>('/api/customer/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    if (response.requires_2fa && response.challenge_id) {
+      return { requires2fa: true, challengeId: response.challenge_id, message: response.message };
+    }
+    if (!response.customer || !response.session_token) {
+      throw new Error(response.message || 'Could not sign in.');
+    }
+    saveCustomerSession(response.customer, response.session_token);
+    return response.customer;
+  },
+  verifyLoginCode: async (challengeId: string, code: string) => {
+    const response = await apiRequest<{ success: boolean; customer: StoredCustomerSession['customer']; session_token: string }>('/api/customer/verify-login', {
+      method: 'POST',
+      body: JSON.stringify({ challenge_id: challengeId, code }),
+    });
+    saveCustomerSession(response.customer, response.session_token);
+    return response.customer;
+  },
+  requestPasswordReset: async (email: string, password: string) =>
+    apiRequest<{ success: boolean; requires_2fa?: boolean; challenge_id?: string; message?: string }>('/api/customer/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+  resetPassword: async (challengeId: string, code: string) =>
+    apiRequest<{ success: boolean; message?: string }>('/api/customer/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ challenge_id: challengeId, code }),
+    }),
+  requestAdminPasswordReset: async (email: string) =>
+    apiRequest<{ success: boolean; message?: string }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  logout: async () => {
+    try {
+      await apiRequest<{ success: boolean }>('/api/customer/logout', { method: 'POST' });
+    } catch {
+      // Session may already be expired server-side. Clear local state either way.
+    }
+    localStorage.removeItem(customerSessionKey);
     return { success: true };
   },
 };

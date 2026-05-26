@@ -21,6 +21,52 @@ type ReceiptCheckState = {
   error?: string;
 };
 
+const compressReceiptImage = (file: File): Promise<File> =>
+  new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      resolve(file);
+      return;
+    }
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const maxSide = 1600;
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      const context = canvas.getContext('2d');
+
+      if (!context) {
+        resolve(file);
+        return;
+      }
+
+      context.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+        },
+        'image/jpeg',
+        0.82
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not read image'));
+    };
+
+    img.src = url;
+  });
+
 const Payment: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -49,20 +95,21 @@ const Payment: React.FC = () => {
       .catch(() => setReceiptCheckerEnabled(true));
   }, []);
 
-  const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleReceiptChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert('File size must be less than 2MB');
+      if (file.size > 8 * 1024 * 1024) {
+        alert('File size must be less than 8MB');
         return;
       }
-      setReceiptFile(file);
+      const uploadFile = await compressReceiptImage(file);
+      setReceiptFile(uploadFile);
       setReceiptCheck(receiptCheckerEnabled ? { status: 'checking' } : { status: 'valid' });
       const reader = new FileReader();
       reader.onloadend = () => {
         setReceiptPreview(reader.result as string);
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(uploadFile);
 
       if (receiptCheckerEnabled) {
         import('@/lib/receiptValidation')
@@ -315,7 +362,7 @@ const Payment: React.FC = () => {
                   <label className="flex h-40 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700 px-4 text-center transition-colors hover:border-violet-500 hover:bg-slate-800/30">
                     <Upload className="w-10 h-10 text-slate-500 mb-2" />
                     <span className="text-slate-300">Click to upload receipt</span>
-                    <span className="text-slate-500 text-sm mt-1">JPG, PNG up to 2MB</span>
+                    <span className="text-slate-500 text-sm mt-1">JPG, PNG up to 8MB, compressed before upload</span>
                     <input
                       type="file"
                       accept="image/*"

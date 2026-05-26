@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Gamepad2, Menu, Search, X } from 'lucide-react';
+import { Gamepad2, Menu, Search, UserRound, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useCustomer } from '@/contexts/CustomerContext';
+import { supportedCurrencies, supportedLanguages, usePreference } from '@/contexts/PreferenceContext';
 import {
   Sheet,
   SheetContent,
@@ -12,6 +14,8 @@ import {
 const Navbar: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const { customer } = useCustomer();
+  const { currency, language, setCurrency, setLanguage } = usePreference();
 
   const navLinks = [
     { path: '/', label: 'Home' },
@@ -56,6 +60,30 @@ const Navbar: React.FC = () => {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
+            <div className="hidden items-center gap-2 lg:flex">
+              <select
+                value={currency}
+                onChange={(event) => setCurrency(event.target.value)}
+                className="h-10 rounded-xl border border-slate-700 bg-slate-950/70 px-2 text-xs font-semibold text-slate-200 outline-none"
+                aria-label="Currency"
+              >
+                {supportedCurrencies.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+              <select
+                value={language}
+                onChange={(event) => setLanguage(event.target.value)}
+                className="h-10 rounded-xl border border-slate-700 bg-slate-950/70 px-2 text-xs font-semibold text-slate-200 outline-none"
+                aria-label="Language"
+              >
+                {supportedLanguages.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
+              </select>
+            </div>
+            <Link to={customer ? '/account' : '/login'} className="hidden sm:block">
+              <Button variant="outline" className="h-10 border-slate-700 bg-slate-950/40 px-4 text-slate-200 hover:bg-slate-800">
+                <UserRound className="mr-2 h-4 w-4" />
+                {customer ? 'Account' : 'Login'}
+              </Button>
+            </Link>
             {/* Mobile Menu */}
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
@@ -99,6 +127,29 @@ const Navbar: React.FC = () => {
                       {link.label}
                     </Link>
                   ))}
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={currency}
+                      onChange={(event) => setCurrency(event.target.value)}
+                      className="h-11 rounded-xl border border-slate-800 bg-slate-900 px-3 text-sm text-slate-200"
+                    >
+                      {supportedCurrencies.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                    <select
+                      value={language}
+                      onChange={(event) => setLanguage(event.target.value)}
+                      className="h-11 rounded-xl border border-slate-800 bg-slate-900 px-3 text-sm text-slate-200"
+                    >
+                      {supportedLanguages.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
+                    </select>
+                  </div>
+                  <Link
+                    to={customer ? '/account' : '/login'}
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-xl bg-violet-500 px-4 py-3 text-base font-semibold text-white transition-colors hover:bg-violet-400"
+                  >
+                    {customer ? 'My Account' : 'Customer Login'}
+                  </Link>
                 </div>
               </SheetContent>
             </Sheet>

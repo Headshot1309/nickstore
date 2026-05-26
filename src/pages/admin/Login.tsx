@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
-import { account } from '@/lib/mongodb'; // Updated import
+import { account, customerAccount } from '@/lib/mongodb'; // Updated import
 
 // Rest of the file remains the same
 const Login: React.FC = () => {
@@ -64,6 +64,19 @@ const Login: React.FC = () => {
       navigate('/admin');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Invalid email or password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const result = await customerAccount.requestAdminPasswordReset(email);
+      setError(result.message || 'Reset instructions sent if the email matches the admin account.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send reset instructions.');
     } finally {
       setLoading(false);
     }
@@ -131,6 +144,13 @@ const Login: React.FC = () => {
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="text-xs text-violet-300 transition-colors hover:text-violet-200"
+                >
+                  Forgot password?
+                </button>
               </div>
             ) : (
               <div className="space-y-2">

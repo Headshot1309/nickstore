@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { CustomerProvider, useCustomer } from '@/contexts/CustomerContext';
+import { PreferenceProvider } from '@/contexts/PreferenceContext';
 import { Toaster } from '@/components/ui/sonner';
 import InstallPrompt from '@/components/shared/InstallPrompt';
 
@@ -13,6 +15,8 @@ import OrderForm from '@/pages/public/OrderForm';
 import Payment from '@/pages/public/Payment';
 import OrderStatus from '@/pages/public/OrderStatus';
 import OrderSuccess from '@/pages/public/OrderSuccess';
+import CustomerLogin from '@/pages/public/CustomerLogin';
+import CustomerAccount from '@/pages/public/CustomerAccount';
 
 // Admin Pages
 import AdminLogin from '@/pages/admin/Login';
@@ -33,6 +37,20 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+const ProtectedCustomerRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isCustomerAuthenticated, loading } = useCustomer();
+
+  if (loading) {
+    return <div className="min-h-screen bg-slate-950" />;
+  }
+
+  if (!isCustomerAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
 function App() {
   // Check if we're on mobile device
   const isMobile = () => {
@@ -48,17 +66,21 @@ function App() {
 
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Home />} />
-          <Route path="/games" element={<Games />} />
-          <Route path="/game/:gameId" element={<GameDetail />} />
-          <Route path="/order" element={<OrderForm />} />
-          <Route path="/payment" element={<Payment />} />
-          <Route path="/track-order" element={<OrderStatus />} />
-          <Route path="/order-status/:orderNumber" element={<OrderStatus />} />
-          <Route path="/order-success" element={<OrderSuccess />} />
+      <CustomerProvider>
+        <PreferenceProvider>
+          <BrowserRouter>
+            <Routes>
+            {/* Public Routes */}
+            <Route path="/" element={<Home />} />
+            <Route path="/games" element={<Games />} />
+            <Route path="/game/:gameId" element={<GameDetail />} />
+            <Route path="/order" element={<ProtectedCustomerRoute><OrderForm /></ProtectedCustomerRoute>} />
+            <Route path="/payment" element={<ProtectedCustomerRoute><Payment /></ProtectedCustomerRoute>} />
+            <Route path="/track-order" element={<OrderStatus />} />
+            <Route path="/order-status/:orderNumber" element={<OrderStatus />} />
+            <Route path="/order-success" element={<OrderSuccess />} />
+            <Route path="/login" element={<CustomerLogin />} />
+            <Route path="/account" element={<ProtectedCustomerRoute><CustomerAccount /></ProtectedCustomerRoute>} />
 
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
@@ -105,9 +127,11 @@ function App() {
 
           {/* 404 - Redirect to Home */}
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        <InstallPrompt />
-      </BrowserRouter>
+            </Routes>
+            <InstallPrompt />
+          </BrowserRouter>
+        </PreferenceProvider>
+      </CustomerProvider>
       <Analytics />
       <Toaster position="top-right" />
     </AuthProvider>
