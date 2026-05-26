@@ -5,6 +5,12 @@ interface ApiListResponse<T = any> {
   total?: number;
 }
 
+interface StoredAdminSession {
+  user: { $id: string; email: string; name: string };
+  token: string;
+  lastActivityAt: number;
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 const makeId = (prefix = 'id') => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -95,13 +101,27 @@ const writeLocalOrders = (orders: any[]) => {
   localStorage.setItem(localOrdersKey, JSON.stringify(orders));
 };
 
+const readAdminSession = (): StoredAdminSession | null => {
+  try {
+    const session = localStorage.getItem(adminSessionKey);
+    return session ? JSON.parse(session) : null;
+  } catch {
+    localStorage.removeItem(adminSessionKey);
+    return null;
+  }
+};
+
 const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
+  const adminSession = readAdminSession();
+  const headers = new Headers(options?.headers);
+  headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
+  if (adminSession?.token) {
+    headers.set('Authorization', `Bearer ${adminSession.token}`);
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
     ...options,
+    headers,
   });
 
   if (!response.ok) {
@@ -186,9 +206,10 @@ export const productsCollection = {
     mutation('/api/catalog/markup', 'POST', data, () => ({ success: true, updated_products: 0, message: 'Markup updated.' })),
 };
 
-const saveAdminSession = (user: { $id: string; email: string; name: string }) => {
+const saveAdminSession = (user: { $id: string; email: string; name: string }, token: string) => {
   localStorage.setItem(adminSessionKey, JSON.stringify({
     user,
+    token,
     lastActivityAt: Date.now(),
   }));
 };
@@ -208,6 +229,16 @@ export const touchAdminSession = () => {
   }
 };
 
+export const settingsCollection = {
+  getPublic: async () =>
+    request<{ receipt_checker_enabled: boolean }>('/api/settings/public'),
+  updateReceiptChecker: async (enabled: boolean) =>
+    mutation('/api/settings/receipt-checker', 'PUT', { enabled }, () => ({
+      success: true,
+      receipt_checker_enabled: enabled,
+    })),
+};
+
 export const ordersCollection = {
   list: async (status?: string) => {
     const localOrders = readLocalOrders();
@@ -219,7 +250,7 @@ export const ordersCollection = {
     return response.documents.find((order: any) => order.$id === orderId || order.id === orderId) || null;
   },
   getByOrderNumber: async (orderNumber: string) => {
-    const response = await ordersCollection.list();
+    const response = await listFromApi('orders', readLocalOrders(), `?order_number=${encodeURIComponent(orderNumber)}`);
     return response.documents.find((order: any) => order.order_number === orderNumber) || null;
   },
   create: async (data: any) =>
@@ -299,9 +330,8 @@ export const generateOrderNumber = (): string => {
 
 export const account = {
   get: async () => {
-    const session = localStorage.getItem(adminSessionKey);
-    if (session) {
-      const parsed = JSON.parse(session);
+    const parsed = readAdminSession();
+    if (parsed) {
       if (!parsed?.user || Date.now() - Number(parsed.lastActivityAt || 0) > ADMIN_IDLE_TIMEOUT_MS) {
         localStorage.removeItem(adminSessionKey);
         throw new Error('Session expired');
@@ -314,6 +344,7 @@ export const account = {
     const response = await request<{
       success: boolean;
       user?: { $id: string; email: string; name: string };
+      session_token?: string;
       requires_2fa?: boolean;
       challenge_id?: string;
       message?: string;
@@ -330,24 +361,24 @@ export const account = {
       };
     }
 
-    if (!response.success || !response.user) {
+    if (!response.success || !response.user || !response.session_token) {
       throw new Error(response.message || 'Invalid credentials');
     }
 
-    saveAdminSession(response.user);
+    saveAdminSession(response.user, response.session_token);
     return response.user;
   },
   verifyEmailCode: async (challengeId: string, code: string) => {
-    const response = await request<{ success: boolean; user?: { $id: string; email: string; name: string }; message?: string }>('/api/auth/verify-2fa', {
+    const response = await request<{ success: boolean; user?: { $id: string; email: string; name: string }; session_token?: string; message?: string }>('/api/auth/verify-2fa', {
       method: 'POST',
       body: JSON.stringify({ challenge_id: challengeId, code }),
     });
 
-    if (!response.success || !response.user) {
+    if (!response.success || !response.user || !response.session_token) {
       throw new Error(response.message || 'Invalid verification code');
     }
 
-    saveAdminSession(response.user);
+    saveAdminSession(response.user, response.session_token);
     return response.user;
   },
   deleteSession: async (_sessionId: string) => {

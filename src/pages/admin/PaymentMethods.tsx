@@ -35,6 +35,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
+import { settingsCollection } from '@/lib/mongodb';
 import type { PaymentMethod } from '@/types';
 
 const typeIcons = {
@@ -83,12 +84,35 @@ const PaymentMethods: React.FC = () => {
   const [qrImagePreview, setQrImagePreview] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const [receiptCheckerEnabled, setReceiptCheckerEnabled] = useState(true);
+  const [savingReceiptChecker, setSavingReceiptChecker] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/admin/login');
     }
   }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    settingsCollection.getPublic()
+      .then((settings) => setReceiptCheckerEnabled(settings.receipt_checker_enabled !== false))
+      .catch(() => setReceiptCheckerEnabled(true));
+  }, [isAuthenticated]);
+
+  const handleReceiptCheckerToggle = async (enabled: boolean) => {
+    setReceiptCheckerEnabled(enabled);
+    setSavingReceiptChecker(true);
+    try {
+      await settingsCollection.updateReceiptChecker(enabled);
+    } catch (err) {
+      setReceiptCheckerEnabled(!enabled);
+      alert(err instanceof Error ? err.message : 'Failed to update receipt checker');
+    } finally {
+      setSavingReceiptChecker(false);
+    }
+  };
 
   const handleOpenModal = (method?: PaymentMethod) => {
     if (method) {
@@ -228,6 +252,23 @@ const PaymentMethods: React.FC = () => {
                 <Plus className="w-4 h-4 mr-2" />
                 Add Payment Method
               </Button>
+            </div>
+          </div>
+
+          <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-cyan-100">Receipt checker</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Turn OCR receipt checks on for automatic validation, or off for manual admin review.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-slate-300">{receiptCheckerEnabled ? 'On' : 'Off'}</span>
+              <Switch
+                checked={receiptCheckerEnabled}
+                disabled={savingReceiptChecker}
+                onCheckedChange={handleReceiptCheckerToggle}
+              />
             </div>
           </div>
 

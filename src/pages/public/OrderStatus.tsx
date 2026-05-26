@@ -23,20 +23,36 @@ import {
 
 const OrderStatus: React.FC = () => {
   const navigate = useNavigate();
-  const { orders, loading, refresh } = useOrders();
+  const { orders, loading, refresh, getOrderByNumber } = useOrders();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [copied, setCopied] = useState(false);
+  const [searchedOrder, setSearchedOrder] = useState<any>(null);
 
   useEffect(() => {
     refresh();
   }, []);
 
+  useEffect(() => {
+    const orderNumber = searchTerm.trim();
+    if (!orderNumber) {
+      setSearchedOrder(null);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      getOrderByNumber(orderNumber).then(setSearchedOrder).catch(() => setSearchedOrder(null));
+    }, 350);
+
+    return () => clearTimeout(timeout);
+  }, [getOrderByNumber, searchTerm]);
+
   // Filter orders based on search term and status
-  const filteredOrders = orders.filter(order => {
+  const sourceOrders = searchedOrder ? [searchedOrder] : orders;
+  const filteredOrders = sourceOrders.filter(order => {
     const matchesSearch = searchTerm === '' || 
       order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.game_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -121,7 +137,7 @@ const OrderStatus: React.FC = () => {
               <div className="relative flex-1">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
                 <Input
-                  placeholder="Search by order number, game name, email, or phone..."
+                  placeholder="Enter your order number..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-12 py-6 bg-slate-900/50 border-slate-800 text-white rounded-xl"

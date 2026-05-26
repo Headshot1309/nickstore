@@ -43,9 +43,7 @@ export const useOrders = () => {
     if (!orderNumber) return null;
     
     try {
-      const response = await ordersCollection.list();
-      const allOrders = response.documents;
-      const foundOrder = allOrders.find((doc: any) => doc.order_number === orderNumber);
+      const foundOrder = await ordersCollection.getByOrderNumber(orderNumber);
       
       if (foundOrder) {
         const order = foundOrder as unknown as Order;
@@ -104,8 +102,9 @@ export const useCreateOrder = () => {
       console.log('Creating order with payload:', orderPayload);
       
       const newOrder = await ordersCollection.create(orderPayload);
+      const confirmedOrderNumber = (newOrder as Order).order_number || orderNumber;
 
-      return { order: newOrder as unknown as Order, orderNumber };
+      return { order: newOrder as unknown as Order, orderNumber: confirmedOrderNumber };
     } catch (err: any) {
       console.error('Error creating order:', err);
       setError(err.message || 'Failed to create order');

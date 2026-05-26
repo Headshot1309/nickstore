@@ -52,6 +52,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   };
 
   const buildSupplierOrder = () => [
+    `/order ${order.supplier_code || order.product_name} ${order.user_game_id}${order.user_game_server ? ` ${order.user_game_server}` : ''}`,
+    '',
     `Order: ${order.order_number}`,
     `Game: ${order.game_name}`,
     `Product: ${order.product_name}`,

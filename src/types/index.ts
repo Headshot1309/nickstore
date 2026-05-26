@@ -47,6 +47,8 @@ export interface Order {
   game_name: string;
   product_id: string;
   product_name: string;
+  supplier_code?: string;
+  provider_slug?: string;
   denomination?: string;
   price: number | string;
   quantity: number | string;

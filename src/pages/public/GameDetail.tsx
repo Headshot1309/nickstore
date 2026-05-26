@@ -50,6 +50,9 @@ const GameDetail: React.FC = () => {
         $id: selectedProduct.$id,
         name: selectedProduct.name,
         price: selectedProduct.price,
+        denomination: selectedProduct.denomination,
+        supplier_code: selectedProduct.supplier_code,
+        provider_slug: selectedProduct.provider_slug,
         description: selectedProduct.description,
         game_id: selectedProduct.game_id,
         is_active: selectedProduct.is_active,
@@ -193,6 +196,8 @@ const GameDetail: React.FC = () => {
                       product={product}
                       isSelected={selectedProduct?.$id === product.$id}
                       onSelect={() => setSelectedProduct(product)}
+                      gameImageUrl={game.image_url}
+                      gameName={game.name}
                     />
                   </div>
                 ))}

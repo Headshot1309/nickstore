@@ -23,6 +23,7 @@ const telegramChatId = process.env.TELEGRAM_CHAT_ID;
 const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
 const adminPassword = process.env.ADMIN_PASSWORD;
 const adminTwoFactorEnabled = process.env.ADMIN_2FA_ENABLED === 'true';
+const adminSessionTtlMs = 10 * 60 * 1000;
 const smtpConfig = {
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 587),
@@ -95,6 +96,9 @@ const formatCurrency = (amount) => {
   const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
   return `RM ${(numericAmount || 0).toFixed(2)}`;
 };
+
+const generateOrderNumber = () =>
+  `ORD-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 
 const normalizeCatalogSlug = (value = '') =>
   String(value)
@@ -184,6 +188,154 @@ const getProductCost = (product) =>
 const isSupplierPricelistProduct = (product) =>
   product?.market_reference?.source === 'Topup_Kryz_bot' || Boolean(product?.supplier_code);
 
+const hashAdminSessionToken = (token) =>
+  crypto.createHash('sha256').update(`${token}:${adminPassword || ''}`).digest('hex');
+
+const createAdminSession = async () => {
+  const database = await getDb();
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = new Date();
+
+  await database.collection('admin_sessions').insertOne({
+    tokenHash: hashAdminSessionToken(token),
+    email: adminEmail.toLowerCase(),
+    createdAt: now,
+    lastActivityAt: now,
+    expiresAt: new Date(now.getTime() + adminSessionTtlMs),
+  });
+
+  return token;
+};
+
+const getBearerToken = (req) => {
+  const header = req.headers.authorization || '';
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  return match?.[1] || '';
+};
+
+const getAdminSessionFromRequest = async (req) => {
+  const token = getBearerToken(req);
+  if (!token || !adminPassword) return null;
+
+  const database = await getDb();
+  const now = new Date();
+  const tokenHash = hashAdminSessionToken(token);
+  const session = await database.collection('admin_sessions').findOne({
+    tokenHash,
+    email: adminEmail.toLowerCase(),
+    expiresAt: { $gt: now },
+  });
+
+  if (!session) return null;
+
+  await database.collection('admin_sessions').updateOne(
+    { _id: session._id },
+    {
+      $set: {
+        lastActivityAt: now,
+        expiresAt: new Date(now.getTime() + adminSessionTtlMs),
+      },
+    }
+  );
+
+  return session;
+};
+
+const requireAdmin = async (req, res, next) => {
+  try {
+    const session = await getAdminSessionFromRequest(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: 'Admin session expired. Please sign in again.' });
+    }
+    req.adminSession = session;
+    next();
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const sanitizeGame = (doc) => ({
+  ...withGameLogo(doc),
+  $id: doc._id.toString(),
+});
+
+const sanitizePublicProduct = (doc) => ({
+  _id: doc._id,
+  $id: doc._id.toString(),
+  game_id: doc.game_id,
+  game_name: doc.game_name,
+  name: doc.name,
+  denomination: doc.denomination,
+  price: doc.price,
+  original_price: doc.original_price,
+  description: doc.description,
+  is_active: doc.is_active,
+  created_at: doc.created_at,
+  updated_at: doc.updated_at,
+});
+
+const gameLogoPalettes = [
+  ['#7c3aed', '#06b6d4'],
+  ['#dc2626', '#f97316'],
+  ['#16a34a', '#84cc16'],
+  ['#2563eb', '#a855f7'],
+  ['#f59e0b', '#ef4444'],
+  ['#0f766e', '#22d3ee'],
+  ['#be123c', '#f472b6'],
+  ['#4338ca', '#38bdf8'],
+];
+
+const getInitials = (name = '') =>
+  String(name)
+    .split(/[\s:()-]+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((word) => word[0]?.toUpperCase())
+    .join('');
+
+const buildGameLogoDataUrl = (game = {}) => {
+  const name = String(game.name || game.game_name || 'NickStore');
+  const slug = String(game.provider_slug || game.key || name).toLowerCase();
+  const hash = [...slug].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const [from, to] = gameLogoPalettes[hash % gameLogoPalettes.length];
+  const initials = getInitials(name) || 'NS';
+  const subtitle = slug.replace(/-/g, ' ').toUpperCase();
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="900" height="675" viewBox="0 0 900 675">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="${from}"/>
+          <stop offset="1" stop-color="${to}"/>
+        </linearGradient>
+        <radialGradient id="glow" cx="70%" cy="20%" r="70%">
+          <stop offset="0" stop-color="#ffffff" stop-opacity=".35"/>
+          <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect width="900" height="675" rx="42" fill="#020617"/>
+      <rect x="22" y="22" width="856" height="631" rx="34" fill="url(#bg)"/>
+      <rect x="22" y="22" width="856" height="631" rx="34" fill="url(#glow)"/>
+      <circle cx="720" cy="92" r="170" fill="#fff" opacity=".10"/>
+      <circle cx="140" cy="570" r="210" fill="#020617" opacity=".18"/>
+      <rect x="96" y="96" width="708" height="483" rx="34" fill="#020617" opacity=".54"/>
+      <text x="450" y="283" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="118" font-weight="900" letter-spacing="6">${initials}</text>
+      <text x="450" y="382" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="46" font-weight="800">${name.replace(/&/g, '&amp;')}</text>
+      <text x="450" y="438" text-anchor="middle" fill="#dbeafe" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="4">${subtitle.replace(/&/g, '&amp;')}</text>
+    </svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+};
+
+const withGameLogo = (doc) => ({
+  ...doc,
+  image_url: buildGameLogoDataUrl(doc),
+});
+
+const sanitizeOrder = (doc) => ({
+  ...doc,
+  $id: doc._id.toString(),
+  receipt_image_url: doc.receipt_image_url ? undefined : doc.receipt_image_url,
+});
+
 const formatOrderDate = (dateValue) => {
   try {
     return new Date(dateValue || Date.now()).toLocaleString('en-MY', {
@@ -200,6 +352,12 @@ const formatOrderDate = (dateValue) => {
 };
 
 const buildTelegramOrderMessage = (order) => {
+  const supplierCommand = [
+    '/order',
+    order.supplier_code || order.product_code || '',
+    order.user_game_id || '',
+    order.user_game_server || '',
+  ].filter(Boolean).join(' ');
   const optionalLines = [
     order.user_game_server ? `<b>Server:</b> ${escapeTelegramHtml(order.user_game_server)}` : '',
     order.user_nickname ? `<b>Nickname:</b> ${escapeTelegramHtml(order.user_nickname)}` : '',
@@ -215,6 +373,7 @@ const buildTelegramOrderMessage = (order) => {
     `Order #: <code>${escapeTelegramHtml(order.order_number)}</code>`,
     `<b>Game:</b> ${escapeTelegramHtml(order.game_name)}`,
     `<b>Product:</b> ${escapeTelegramHtml(order.product_name)}`,
+    order.supplier_code ? `<b>Supplier Code:</b> <code>${escapeTelegramHtml(order.supplier_code)}</code>` : '',
     order.denomination ? `<b>Denomination:</b> ${escapeTelegramHtml(order.denomination)}` : '',
     `<b>Total:</b> ${escapeTelegramHtml(formatCurrency(order.total_amount))}`,
     `<b>Payment:</b> ${escapeTelegramHtml(order.payment_method_name)}`,
@@ -226,6 +385,9 @@ const buildTelegramOrderMessage = (order) => {
     '<b>Customer Details</b>',
     `<b>Game ID:</b> <code>${escapeTelegramHtml(order.user_game_id)}</code>`,
     ...optionalLines,
+    '',
+    '<b>Supplier Command</b>',
+    `<code>${escapeTelegramHtml(supplierCommand)}</code>`,
     '',
     '<a href="https://nickstore-iota.vercel.app/admin/orders">Open admin orders</a>',
   ].filter(Boolean).join('\n');
@@ -299,6 +461,12 @@ const sendTelegramReceiptPhoto = async (order) => {
   return data;
 };
 
+const getReceiptCheckerEnabled = async () => {
+  const database = await getDb();
+  const setting = await database.collection('settings').findOne({ key: 'receipt_checker_enabled' });
+  return setting?.value !== false;
+};
+
 const sendTelegramFullOrder = async (order) => {
   const messageResult = await sendTelegramOrderNotification(order);
   const receiptResult = await sendTelegramReceiptPhoto(order);
@@ -352,8 +520,10 @@ app.post('/api/auth/login', async (req, res) => {
         });
       }
 
+      const sessionToken = await createAdminSession();
       res.json({ 
         success: true, 
+        session_token: sessionToken,
         user: { $id: 'admin1', id: 'admin1', email: adminEmail, name: 'Admin' }
       });
     } else {
@@ -371,13 +541,11 @@ app.get('/api/games', async (req, res) => {
       await connectDB();
     }
 
-    const games = await db.collection('games').find({}).toArray();
+    const isAdmin = Boolean(await getAdminSessionFromRequest(req));
+    const games = await db.collection('games').find(isAdmin ? {} : { is_active: true }).toArray();
 
     res.json({
-      documents: games.map(doc => ({
-        ...doc,
-        $id: doc._id.toString()
-      }))
+      documents: games.map(sanitizeGame)
     });
   } catch (error) {
     console.error("GET /api/games error:", error);
@@ -387,7 +555,7 @@ app.get('/api/games', async (req, res) => {
     });
   }
 });
-app.post('/api/games', async (req, res) => {
+app.post('/api/games', requireAdmin, async (req, res) => {
   try {
     const data = { ...req.body, created_at: new Date(), updated_at: new Date() };
     const result = await db.collection('games').insertOne(data);
@@ -397,7 +565,7 @@ app.post('/api/games', async (req, res) => {
   }
 });
 
-app.put('/api/games/:id', async (req, res) => {
+app.put('/api/games/:id', requireAdmin, async (req, res) => {
   try {
     const data = { ...req.body, updated_at: new Date() };
     await db.collection('games').updateOne(
@@ -410,7 +578,7 @@ app.put('/api/games/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/games/:id', async (req, res) => {
+app.delete('/api/games/:id', requireAdmin, async (req, res) => {
   try {
     await db.collection('games').deleteOne({ _id: toObjectId(req.params.id) });
     res.json({ success: true });
@@ -424,15 +592,53 @@ app.get('/api/products', async (req, res) => {
   try {
     const database = await getDb();
     const { game_id } = req.query;
-    const query = game_id ? { game_id } : {};
+    const isAdmin = Boolean(await getAdminSessionFromRequest(req));
+    const query = {
+      ...(game_id ? { game_id } : {}),
+      ...(isAdmin ? {} : { is_active: true }),
+    };
     const products = await database.collection('products').find(query).toArray();
-    res.json({ documents: products.map(doc => ({ ...doc, $id: doc._id.toString() })) });
+    res.json({
+      documents: products.map((doc) => isAdmin ? ({ ...doc, $id: doc._id.toString() }) : sanitizePublicProduct(doc)),
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/products', async (req, res) => {
+app.get('/api/settings/public', async (_req, res) => {
+  try {
+    res.json({
+      receipt_checker_enabled: await getReceiptCheckerEnabled(),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.put('/api/settings/receipt-checker', requireAdmin, async (req, res) => {
+  try {
+    const database = await getDb();
+    const enabled = req.body?.enabled !== false;
+    await database.collection('settings').updateOne(
+      { key: 'receipt_checker_enabled' },
+      {
+        $set: {
+          key: 'receipt_checker_enabled',
+          value: enabled,
+          updated_at: new Date(),
+        },
+        $setOnInsert: { created_at: new Date() },
+      },
+      { upsert: true }
+    );
+    res.json({ success: true, receipt_checker_enabled: enabled });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/products', requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     const costPrice = Number(req.body.cost_price ?? req.body.price ?? 0);
@@ -452,7 +658,7 @@ app.post('/api/products', async (req, res) => {
   }
 });
 
-app.put('/api/products/:id', async (req, res) => {
+app.put('/api/products/:id', requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     const existing = await database.collection('products').findOne({ _id: toObjectId(req.params.id) });
@@ -474,7 +680,7 @@ app.put('/api/products/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/products/:id', async (req, res) => {
+app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     await database.collection('products').deleteOne({ _id: toObjectId(req.params.id) });
@@ -484,7 +690,7 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
-app.post('/api/catalog/seed-market', async (_req, res) => {
+app.post('/api/catalog/seed-market', requireAdmin, async (_req, res) => {
   try {
     const database = await getDb();
     const now = new Date();
@@ -561,7 +767,7 @@ app.post('/api/catalog/seed-market', async (_req, res) => {
   }
 });
 
-app.post('/api/catalog/import-pricelist', async (req, res) => {
+app.post('/api/catalog/import-pricelist', requireAdmin, async (req, res) => {
   try {
     const csvText = typeof req.body === 'string' ? req.body : req.body?.csv;
     const dryRun = req.query.dry_run === 'true';
@@ -717,7 +923,7 @@ app.post('/api/catalog/import-pricelist', async (req, res) => {
   }
 });
 
-app.post('/api/catalog/markup', async (req, res) => {
+app.post('/api/catalog/markup', requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     const now = new Date();
@@ -779,7 +985,7 @@ app.post('/api/catalog/markup', async (req, res) => {
   }
 });
 
-app.post('/api/catalog/prune-to-pricelist', async (_req, res) => {
+app.post('/api/catalog/prune-to-pricelist', requireAdmin, async (_req, res) => {
   try {
     const database = await getDb();
     const now = new Date();
@@ -830,7 +1036,10 @@ app.post('/api/catalog/prune-to-pricelist', async (_req, res) => {
         name: catalogGame?.name || sampleProduct?.game_name || sampleProduct?.provider_slug || id,
         description: catalogGame?.description || `Imported pricelist catalog for ${sampleProduct?.game_name || id}.`,
         image_id: '',
-        image_url: catalogGame?.image_url || '',
+        image_url: buildGameLogoDataUrl({
+          name: catalogGame?.name || sampleProduct?.game_name || sampleProduct?.provider_slug || id,
+          provider_slug: sampleProduct?.provider_slug || id,
+        }),
         provider_slug: sampleProduct?.provider_slug || id,
         service_count: catalogGame?.service_count,
         is_active: true,
@@ -893,8 +1102,18 @@ app.post('/api/catalog/prune-to-pricelist', async (_req, res) => {
 app.get('/api/orders', async (req, res) => {
   try {
     const database = await getDb();
-    const orders = await database.collection('orders').find({}).sort({ created_at: -1 }).toArray();
-    res.json({ documents: orders.map(doc => ({ ...doc, $id: doc._id.toString() })) });
+    const isAdmin = Boolean(await getAdminSessionFromRequest(req));
+    const orderNumber = String(req.query.order_number || '').trim();
+
+    if (!isAdmin && !orderNumber) {
+      return res.json({ documents: [] });
+    }
+
+    const query = orderNumber ? { order_number: orderNumber } : {};
+    const orders = await database.collection('orders').find(query).sort({ created_at: -1 }).toArray();
+    res.json({
+      documents: orders.map((doc) => isAdmin ? ({ ...doc, $id: doc._id.toString() }) : sanitizeOrder(doc)),
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -903,7 +1122,42 @@ app.get('/api/orders', async (req, res) => {
 app.post('/api/orders', async (req, res) => {
   try {
     const database = await getDb();
-    const data = { ...req.body, created_at: new Date(), updated_at: new Date() };
+    const product = await database.collection('products').findOne({
+      _id: toObjectId(req.body.product_id),
+      is_active: true,
+    });
+
+    if (!product) {
+      return res.status(400).json({ success: false, message: 'Selected product is unavailable.' });
+    }
+
+    const quantity = Math.max(1, Number.parseInt(req.body.quantity, 10) || 1);
+    const unitPrice = Number(product.price || 0);
+    const totalAmount = Number((unitPrice * quantity).toFixed(2));
+    const receiptValidation = req.body.receipt_validation
+      ? {
+          ...req.body.receipt_validation,
+          expectedAmount: totalAmount,
+          amountMatched: req.body.receipt_validation.amountMatched === true && Number(req.body.receipt_validation.expectedAmount) === totalAmount,
+        }
+      : undefined;
+    const data = {
+      ...req.body,
+      order_number: generateOrderNumber(),
+      game_id: product.game_id,
+      game_name: product.game_name,
+      product_id: product._id.toString(),
+      product_name: product.name,
+      denomination: product.denomination,
+      supplier_code: product.supplier_code || req.body.supplier_code || '',
+      provider_slug: product.provider_slug || req.body.provider_slug || '',
+      price: String(unitPrice),
+      quantity: String(quantity),
+      total_amount: String(totalAmount),
+      receipt_validation: receiptValidation,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
     const result = await database.collection('orders').insertOne(data);
     const order = { ...data, $id: result.insertedId.toString() };
 
@@ -949,8 +1203,10 @@ app.post('/api/auth/verify-2fa', async (req, res) => {
       { $set: { used: true, usedAt: new Date() } }
     );
 
+    const sessionToken = await createAdminSession();
     res.json({
       success: true,
+      session_token: sessionToken,
       user: { $id: 'admin1', id: 'admin1', email: adminEmail, name: 'Admin' },
     });
   } catch (error) {
@@ -958,7 +1214,7 @@ app.post('/api/auth/verify-2fa', async (req, res) => {
   }
 });
 
-app.post('/api/telegram/test-order', async (req, res) => {
+app.post('/api/telegram/test-order', requireAdmin, async (req, res) => {
   try {
     const note = req.body?.note || 'testing bot';
     const sampleOrder = {
@@ -994,7 +1250,7 @@ app.post('/api/telegram/test-order', async (req, res) => {
   }
 });
 
-app.put('/api/orders/:id', async (req, res) => {
+app.put('/api/orders/:id', requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     const data = { ...req.body, updated_at: new Date() };
@@ -1008,7 +1264,7 @@ app.put('/api/orders/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/orders/:id', async (req, res) => {
+app.delete('/api/orders/:id', requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     await database.collection('orders').deleteOne({ _id: toObjectId(req.params.id) });
@@ -1022,14 +1278,15 @@ app.delete('/api/orders/:id', async (req, res) => {
 app.get('/api/payment-methods', async (req, res) => {
   try {
     const database = await getDb();
-    const methods = await database.collection('payment_methods').find({}).toArray();
+    const isAdmin = Boolean(await getAdminSessionFromRequest(req));
+    const methods = await database.collection('payment_methods').find(isAdmin ? {} : { is_active: true }).toArray();
     res.json({ documents: methods.map(doc => ({ ...doc, $id: doc._id.toString() })) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/payment-methods', async (req, res) => {
+app.post('/api/payment-methods', requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     const data = { ...req.body, created_at: new Date(), updated_at: new Date() };
@@ -1040,7 +1297,7 @@ app.post('/api/payment-methods', async (req, res) => {
   }
 });
 
-app.put('/api/payment-methods/:id', async (req, res) => {
+app.put('/api/payment-methods/:id', requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     const data = { ...req.body, updated_at: new Date() };
@@ -1054,7 +1311,7 @@ app.put('/api/payment-methods/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/payment-methods/:id', async (req, res) => {
+app.delete('/api/payment-methods/:id', requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     await database.collection('payment_methods').deleteOne({ _id: toObjectId(req.params.id) });

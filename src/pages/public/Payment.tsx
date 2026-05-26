@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import type { PaymentMethod } from '@/types';
 import type { ReceiptValidationResult } from '@/lib/receiptValidation';
 import { getSupportWhatsAppLink } from '@/lib/orderSharing';
+import { settingsCollection } from '@/lib/mongodb';
 
 type ReceiptCheckState = {
   status: 'idle' | 'checking' | 'valid' | 'invalid';
@@ -31,6 +32,7 @@ const Payment: React.FC = () => {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string>('');
   const [receiptCheck, setReceiptCheck] = useState<ReceiptCheckState>({ status: 'idle' });
+  const [receiptCheckerEnabled, setReceiptCheckerEnabled] = useState(true);
   const [error, setError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -41,6 +43,12 @@ const Payment: React.FC = () => {
     }
   }, [game, product, navigate]);
 
+  useEffect(() => {
+    settingsCollection.getPublic()
+      .then((settings) => setReceiptCheckerEnabled(settings.receipt_checker_enabled !== false))
+      .catch(() => setReceiptCheckerEnabled(true));
+  }, []);
+
   const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -49,25 +57,27 @@ const Payment: React.FC = () => {
         return;
       }
       setReceiptFile(file);
-      setReceiptCheck({ status: 'checking' });
+      setReceiptCheck(receiptCheckerEnabled ? { status: 'checking' } : { status: 'valid' });
       const reader = new FileReader();
       reader.onloadend = () => {
         setReceiptPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
 
-      import('@/lib/receiptValidation')
-        .then(({ validateReceiptImage }) => validateReceiptImage(file, Number(product.price || 0)))
-        .then((result) => {
-          setReceiptCheck({ status: result.accepted ? 'valid' : 'invalid', result });
-        })
-        .catch((validationError) => {
-          console.error('Receipt validation failed:', validationError);
-          setReceiptCheck({
-            status: 'invalid',
-            error: 'Could not read this receipt. Please upload a clearer screenshot.',
+      if (receiptCheckerEnabled) {
+        import('@/lib/receiptValidation')
+          .then(({ validateReceiptImage }) => validateReceiptImage(file, Number(product.price || 0)))
+          .then((result) => {
+            setReceiptCheck({ status: result.accepted ? 'valid' : 'invalid', result });
+          })
+          .catch((validationError) => {
+            console.error('Receipt validation failed:', validationError);
+            setReceiptCheck({
+              status: 'invalid',
+              error: 'Could not read this receipt. Please upload a clearer screenshot.',
+            });
           });
-        });
+      }
     }
   };
 
@@ -87,7 +97,7 @@ const Payment: React.FC = () => {
       return;
     }
 
-    if (receiptCheck.status !== 'valid' || !receiptCheck.result?.accepted) {
+    if (receiptCheckerEnabled && (receiptCheck.status !== 'valid' || !receiptCheck.result?.accepted)) {
       setError(receiptCheck.result?.message || receiptCheck.error || 'Receipt must be accepted before placing the order');
       return;
     }
@@ -102,6 +112,8 @@ const Payment: React.FC = () => {
       game_name: game.name,
       product_id: product.$id,
       product_name: product.name,
+      supplier_code: product.supplier_code || '',
+      provider_slug: product.provider_slug || '',
       denomination: product.denomination,
       price: product.price,
       quantity: 1,
@@ -113,7 +125,7 @@ const Payment: React.FC = () => {
       user_phone: userDetails.userPhone || '',
       payment_method_id: selectedMethod.$id,
       payment_method_name: selectedMethod.name,
-      receipt_validation: {
+      receipt_validation: receiptCheckerEnabled && receiptCheck.result ? {
         accepted: receiptCheck.result.accepted,
         recipientMatched: receiptCheck.result.recipientMatched,
         timeMatched: receiptCheck.result.timeMatched,
@@ -123,6 +135,14 @@ const Payment: React.FC = () => {
         detectedReceiptTime: receiptCheck.result.detectedReceiptTime,
         minutesDifference: receiptCheck.result.minutesDifference,
         message: receiptCheck.result.message,
+        checked_at: new Date().toISOString(),
+      } : {
+        accepted: false,
+        recipientMatched: false,
+        timeMatched: false,
+        amountMatched: false,
+        expectedAmount: Number(product.price || 0),
+        message: 'Receipt checker disabled. Admin review required.',
         checked_at: new Date().toISOString(),
       },
     };
@@ -319,7 +339,7 @@ const Payment: React.FC = () => {
                         <p className="font-medium">
                           {receiptCheck.status === 'checking'
                             ? 'Checking receipt...'
-                            : receiptCheck.result?.message || receiptCheck.error}
+                            : receiptCheck.result?.message || receiptCheck.error || 'Receipt uploaded. Admin will review it manually.'}
                         </p>
                         {receiptCheck.status === 'invalid' && (
                           <p className="mt-1 text-xs opacity-85">
@@ -353,7 +373,9 @@ const Payment: React.FC = () => {
               </div>
               <div className="flex items-start gap-2 rounded-2xl border border-slate-800 bg-slate-900/55 p-4 text-xs leading-5 text-slate-400">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
-                Receipt checking uses OCR and can make mistakes on blurry screenshots. Admin still sees the uploaded receipt and validation result.
+                {receiptCheckerEnabled
+                  ? 'Receipt checking uses OCR and can make mistakes on blurry screenshots. Admin still sees the uploaded receipt and validation result.'
+                  : 'Receipt checker is currently off. Admin will review uploaded receipts manually.'}
               </div>
             </div>
 

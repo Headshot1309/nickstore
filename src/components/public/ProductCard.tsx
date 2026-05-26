@@ -7,12 +7,16 @@ interface ProductCardProps {
   product: Product;
   isSelected: boolean;
   onSelect: () => void;
+  gameImageUrl?: string;
+  gameName?: string;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   isSelected,
   onSelect,
+  gameImageUrl,
+  gameName,
 }) => {
   const hasDiscount = product.original_price && product.original_price > product.price;
   const discountPercent = hasDiscount
@@ -45,8 +49,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       )}
 
       <div className={cn('relative flex h-full flex-col', hasDiscount ? 'pt-9' : '')}>
-        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-300/10 text-cyan-200">
-          <Gem className="h-5 w-5" />
+        <div className="mb-4 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-cyan-300/15 bg-cyan-300/10 text-cyan-200">
+          {gameImageUrl ? (
+            <img src={gameImageUrl} alt={gameName || product.game_name} className="h-full w-full object-cover" loading="lazy" />
+          ) : (
+            <Gem className="h-5 w-5" />
+          )}
         </div>
 
         <div className="pr-8">
