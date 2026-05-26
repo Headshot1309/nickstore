@@ -1,5 +1,7 @@
 type CollectionName = 'games' | 'products' | 'orders' | 'payment-methods';
 
+import { createGameVisualDataUrl } from '@/lib/gameVisuals';
+
 interface ApiListResponse<T = any> {
   documents: T[];
   total?: number;
@@ -34,7 +36,7 @@ const fallbackGames = [
     name: 'Mobile Legends',
     description: 'Fast diamonds top-up for MLBB players in Malaysia.',
     image_id: '',
-    image_url: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=900&q=80',
+    image_url: createGameVisualDataUrl('Mobile Legends'),
     is_active: true,
     created_at: '2026-01-01T00:00:00.000Z',
   },
@@ -43,7 +45,7 @@ const fallbackGames = [
     name: 'Free Fire',
     description: 'Instant Garena Free Fire diamonds with secure payment.',
     image_id: '',
-    image_url: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=900&q=80',
+    image_url: createGameVisualDataUrl('Free Fire'),
     is_active: true,
     created_at: '2026-01-02T00:00:00.000Z',
   },
@@ -52,7 +54,7 @@ const fallbackGames = [
     name: 'PUBG Mobile',
     description: 'UC packages delivered quickly after payment confirmation.',
     image_id: '',
-    image_url: 'https://images.unsplash.com/photo-1560253023-3ec5d502959f?auto=format&fit=crop&w=900&q=80',
+    image_url: createGameVisualDataUrl('PUBG Mobile'),
     is_active: true,
     created_at: '2026-01-03T00:00:00.000Z',
   },
@@ -61,7 +63,7 @@ const fallbackGames = [
     name: 'Genshin Impact',
     description: 'Genesis Crystals and Welkin options for smooth adventuring.',
     image_id: '',
-    image_url: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=900&q=80',
+    image_url: createGameVisualDataUrl('Genshin Impact'),
     is_active: true,
     created_at: '2026-01-04T00:00:00.000Z',
   },

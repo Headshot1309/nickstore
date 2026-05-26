@@ -19,14 +19,15 @@ import { useGames } from '@/hooks/useGames';
 import { useCustomer } from '@/contexts/CustomerContext';
 import { statsCollection, type PopularGameStat } from '@/lib/mongodb';
 import { usePreference } from '@/contexts/PreferenceContext';
+import { createGameVisualDataUrl } from '@/lib/gameVisuals';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 
 const featuredFallback = [
-  { name: 'Mobile Legends', image_url: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=900&q=80' },
-  { name: 'Free Fire', image_url: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=900&q=80' },
-  { name: 'PUBG Mobile', image_url: 'https://images.unsplash.com/photo-1560253023-3ec5d502959f?auto=format&fit=crop&w=900&q=80' },
+  { name: 'Mobile Legends', image_url: createGameVisualDataUrl('Mobile Legends') },
+  { name: 'Free Fire', image_url: createGameVisualDataUrl('Free Fire') },
+  { name: 'PUBG Mobile', image_url: createGameVisualDataUrl('PUBG Mobile') },
 ];
 
 const serviceStats = [

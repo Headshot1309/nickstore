@@ -5,9 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
-import { account, customerAccount } from '@/lib/mongodb'; // Updated import
+import { account, customerAccount } from '@/lib/mongodb';
 
-// Rest of the file remains the same
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const { login, verifyLoginCode, isAuthenticated } = useAuth();

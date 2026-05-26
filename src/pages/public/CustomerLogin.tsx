@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Mail, Phone, User, UserPlus } from 'lucide-react';
 import Navbar from '@/components/public/Navbar';
 import Footer from '@/components/public/Footer';
@@ -199,7 +199,7 @@ const CustomerLogin: React.FC = () => {
           </div>
 
           <p className="mt-5 text-center text-sm text-slate-500">
-            Admin login is still at <Link to="/admin/login" className="text-violet-300 hover:text-violet-200">/admin/login</Link>.
+            Customer accounts are for checkout only. Admin access stays private.
           </p>
         </section>
       </main>

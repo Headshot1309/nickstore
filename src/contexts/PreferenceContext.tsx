@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 export const supportedCurrencies = [
   'MYR', 'USD', 'EUR', 'GBP', 'SGD', 'IDR', 'THB', 'PHP', 'VND', 'CNY', 'JPY', 'KRW',
@@ -89,6 +89,33 @@ const PreferenceContext = createContext<PreferenceContextType | undefined>(undef
 export const PreferenceProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [currency, setCurrencyState] = useState(() => localStorage.getItem('nickstore_currency') || 'MYR');
   const [language, setLanguageState] = useState(() => localStorage.getItem('nickstore_language') || 'en');
+  const [rates, setRates] = useState<Record<string, number>>(ratesFromMyr);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetch('/api/currency/rates')
+      .then((response) => {
+        if (!response.ok) throw new Error('Could not load currency rates');
+        return response.json();
+      })
+      .then((payload) => {
+        if (!isMounted || !payload?.rates) return;
+        const nextRates = supportedCurrencies.reduce<Record<string, number>>((acc, code) => {
+          const rate = Number(payload.rates[code]);
+          acc[code] = Number.isFinite(rate) && rate > 0 ? rate : ratesFromMyr[code] || 1;
+          return acc;
+        }, { MYR: 1 });
+        setRates({ ...ratesFromMyr, ...nextRates, MYR: 1 });
+      })
+      .catch(() => {
+        if (isMounted) setRates(ratesFromMyr);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const value = useMemo<PreferenceContextType>(() => {
     const setCurrency = (nextCurrency: string) => {
@@ -105,7 +132,7 @@ export const PreferenceProvider: React.FC<React.PropsWithChildren> = ({ children
     };
 
     const formatMoney = (amountMyr: number | string) => {
-      const amount = Number(amountMyr || 0) * (ratesFromMyr[currency] || 1);
+      const amount = Number(amountMyr || 0) * (rates[currency] || 1);
       return new Intl.NumberFormat(language, {
         style: 'currency',
         currency,
@@ -115,7 +142,7 @@ export const PreferenceProvider: React.FC<React.PropsWithChildren> = ({ children
     };
 
     return { currency, language, setCurrency, setLanguage, formatMoney };
-  }, [currency, language]);
+  }, [currency, language, rates]);
 
   return <PreferenceContext.Provider value={value}>{children}</PreferenceContext.Provider>;
 };

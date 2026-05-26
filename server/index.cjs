@@ -89,6 +89,69 @@ const smtpConfig = {
   from: process.env.SMTP_FROM || process.env.SMTP_USER || adminEmail,
 };
 
+const supportedCurrencyCodes = [
+  'MYR', 'USD', 'EUR', 'GBP', 'SGD', 'IDR', 'THB', 'PHP', 'VND', 'CNY', 'JPY', 'KRW',
+  'AUD', 'NZD', 'CAD', 'CHF', 'SEK', 'NOK', 'DKK', 'AED', 'SAR', 'QAR', 'KWD', 'BHD',
+  'OMR', 'INR', 'PKR', 'BDT', 'LKR', 'NPR', 'HKD', 'TWD', 'BRL', 'MXN', 'ARS', 'CLP',
+  'COP', 'PEN', 'ZAR', 'EGP', 'NGN', 'KES', 'TRY', 'PLN', 'CZK', 'HUF', 'RON',
+];
+
+const fallbackRatesFromMyr = {
+  MYR: 1,
+  USD: 0.21,
+  EUR: 0.19,
+  GBP: 0.17,
+  SGD: 0.28,
+  IDR: 3400,
+  THB: 7.7,
+  PHP: 12.2,
+  VND: 5400,
+  CNY: 1.52,
+  JPY: 33,
+  KRW: 295,
+  AUD: 0.32,
+  NZD: 0.35,
+  CAD: 0.29,
+  CHF: 0.18,
+  SEK: 2.1,
+  NOK: 2.2,
+  DKK: 1.42,
+  AED: 0.78,
+  SAR: 0.8,
+  QAR: 0.77,
+  KWD: 0.065,
+  BHD: 0.08,
+  OMR: 0.081,
+  INR: 18,
+  PKR: 60,
+  BDT: 25,
+  LKR: 65,
+  NPR: 29,
+  HKD: 1.68,
+  TWD: 6.8,
+  BRL: 1.15,
+  MXN: 3.9,
+  ARS: 230,
+  CLP: 200,
+  COP: 850,
+  PEN: 0.78,
+  ZAR: 3.8,
+  EGP: 10.4,
+  NGN: 330,
+  KES: 27,
+  TRY: 7.2,
+  PLN: 0.82,
+  CZK: 4.7,
+  HUF: 75,
+  RON: 0.95,
+};
+
+let currencyRateCache = {
+  fetchedAt: 0,
+  rates: fallbackRatesFromMyr,
+  source: 'fallback',
+};
+
 const hasSmtpConfig = () => Boolean(smtpConfig.host && smtpConfig.user && smtpConfig.pass);
 
 const hashAdminCode = (code, challengeId) =>
@@ -107,6 +170,54 @@ const safeString = (value, maxLength = 500) => {
 const normalizeEmail = (value) => safeString(value, 254).toLowerCase();
 
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+const sanitizeCurrencyRates = (rates = {}) => {
+  const sanitized = { MYR: 1 };
+  supportedCurrencyCodes.forEach((code) => {
+    const rate = Number(rates[code]);
+    if (Number.isFinite(rate) && rate > 0) {
+      sanitized[code] = rate;
+    }
+  });
+  return { ...fallbackRatesFromMyr, ...sanitized, MYR: 1 };
+};
+
+const getFreshCurrencyRates = async () => {
+  const now = Date.now();
+  if (now - currencyRateCache.fetchedAt < 6 * 60 * 60 * 1000) {
+    return currencyRateCache;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4500);
+
+  try {
+    const response = await fetch('https://open.er-api.com/v6/latest/MYR', {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error(`Exchange API returned ${response.status}`);
+    const payload = await response.json();
+    if (!payload?.rates) throw new Error('Exchange API response missing rates');
+
+    currencyRateCache = {
+      fetchedAt: now,
+      rates: sanitizeCurrencyRates(payload.rates),
+      source: 'open.er-api.com',
+    };
+  } catch (error) {
+    console.warn('Currency rates fallback in use:', error.message);
+    currencyRateCache = {
+      fetchedAt: now,
+      rates: currencyRateCache.rates || fallbackRatesFromMyr,
+      source: currencyRateCache.source === 'fallback' ? 'fallback' : `${currencyRateCache.source}-cached`,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  return currencyRateCache;
+};
 
 const sendAdminVerificationEmail = async (code) => {
   if (!hasSmtpConfig()) {
@@ -487,13 +598,103 @@ const getInitials = (name = '') =>
     .map((word) => word[0]?.toUpperCase())
     .join('');
 
+const escapeXml = (value = '') =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+const gameVisualThemes = [
+  {
+    match: /mobile-legends|mlbb|mlid|mlmy|mlph|mlsg|mlbr|mlgb|magic-chess|honor-of-kings|hok/,
+    label: 'MOBA',
+    from: '#1d4ed8',
+    to: '#7c3aed',
+    icon: 'sword',
+  },
+  {
+    match: /free-fire|pubg|valorant|valo|arena-breakout|blood-strike|delta-force|point-blank|pbid/,
+    label: 'BATTLE',
+    from: '#dc2626',
+    to: '#f59e0b',
+    icon: 'crosshair',
+  },
+  {
+    match: /genshin|honkai|wuthering|wuwa|zenless|zzz|dragon-nest|where-winds/,
+    label: 'RPG',
+    from: '#0891b2',
+    to: '#8b5cf6',
+    icon: 'crystal',
+  },
+  {
+    match: /roblox|robux|eggy/,
+    label: 'PLAY',
+    from: '#0f766e',
+    to: '#22c55e',
+    icon: 'blocks',
+  },
+  {
+    match: /marvel/,
+    label: 'HERO',
+    from: '#b91c1c',
+    to: '#2563eb',
+    icon: 'star',
+  },
+  {
+    match: /token-listrik/,
+    label: 'UTILITY',
+    from: '#f59e0b',
+    to: '#16a34a',
+    icon: 'bolt',
+  },
+];
+
+const getGameVisualTheme = (slug) =>
+  gameVisualThemes.find((theme) => theme.match.test(slug)) || {
+    label: 'TOP UP',
+    from: '#7c3aed',
+    to: '#db2777',
+    icon: 'diamond',
+  };
+
+const getThemeIconSvg = (icon) => {
+  const stroke = 'stroke="#fff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" fill="none"';
+  if (icon === 'crosshair') {
+    return `<circle cx="450" cy="258" r="90" ${stroke}/><path d="M450 118v70M450 328v70M310 258h70M520 258h70" ${stroke}/><circle cx="450" cy="258" r="18" fill="#fff"/>`;
+  }
+  if (icon === 'crystal') {
+    return `<path d="M450 108 555 205 520 390 450 460 380 390 345 205Z" fill="#fff" opacity=".95"/><path d="M450 108v352M345 205h210M380 390h140" stroke="${escapeXml('#0f172a')}" stroke-width="14" opacity=".45"/>`;
+  }
+  if (icon === 'sword') {
+    return `<path d="M545 120 580 155 365 370 330 335Z" fill="#fff"/><path d="M323 334 366 377 315 428 272 385Z" fill="#fde68a"/><path d="M365 370 418 423" ${stroke}/>`;
+  }
+  if (icon === 'blocks') {
+    return `<rect x="335" y="138" width="104" height="104" rx="20" fill="#fff"/><rect x="462" y="138" width="104" height="104" rx="20" fill="#dbeafe"/><rect x="398" y="266" width="104" height="104" rx="20" fill="#bbf7d0"/>`;
+  }
+  if (icon === 'star') {
+    return `<path d="m450 112 43 88 97 14-70 68 17 96-87-46-87 46 17-96-70-68 97-14Z" fill="#fff"/>`;
+  }
+  if (icon === 'bolt') {
+    return `<path d="M488 104 350 295h92l-30 154 142-205h-92Z" fill="#fff"/>`;
+  }
+  return `<path d="M450 118 586 245 450 445 314 245Z" fill="#fff"/><path d="M314 245h272M450 118v327" stroke="${escapeXml('#0f172a')}" stroke-width="16" opacity=".35"/>`;
+};
+
+const isGenericCatalogImage = (url = '') =>
+  !url || /images\.unsplash\.com|picsum\.photos|placeholder|source\.unsplash/i.test(String(url));
+
 const buildGameLogoDataUrl = (game = {}) => {
   const name = String(game.name || game.game_name || 'NickStore');
   const slug = String(game.provider_slug || game.key || name).toLowerCase();
   const hash = [...slug].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const [from, to] = gameLogoPalettes[hash % gameLogoPalettes.length];
+  const fallbackPalette = gameLogoPalettes[hash % gameLogoPalettes.length];
+  const theme = getGameVisualTheme(slug);
+  const from = theme.from || fallbackPalette[0];
+  const to = theme.to || fallbackPalette[1];
   const initials = getInitials(name) || 'NS';
   const subtitle = slug.replace(/-/g, ' ').toUpperCase();
+  const iconSvg = getThemeIconSvg(theme.icon);
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="900" height="675" viewBox="0 0 900 675">
       <defs>
@@ -505,23 +706,30 @@ const buildGameLogoDataUrl = (game = {}) => {
           <stop offset="0" stop-color="#ffffff" stop-opacity=".35"/>
           <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
         </radialGradient>
+        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="24" stdDeviation="22" flood-color="#020617" flood-opacity=".42"/>
+        </filter>
       </defs>
       <rect width="900" height="675" rx="42" fill="#020617"/>
       <rect x="22" y="22" width="856" height="631" rx="34" fill="url(#bg)"/>
       <rect x="22" y="22" width="856" height="631" rx="34" fill="url(#glow)"/>
-      <circle cx="720" cy="92" r="170" fill="#fff" opacity=".10"/>
-      <circle cx="140" cy="570" r="210" fill="#020617" opacity=".18"/>
-      <rect x="96" y="96" width="708" height="483" rx="34" fill="#020617" opacity=".54"/>
-      <text x="450" y="283" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="118" font-weight="900" letter-spacing="6">${initials}</text>
-      <text x="450" y="382" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="46" font-weight="800">${name.replace(/&/g, '&amp;')}</text>
-      <text x="450" y="438" text-anchor="middle" fill="#dbeafe" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="4">${subtitle.replace(/&/g, '&amp;')}</text>
+      <circle cx="735" cy="104" r="178" fill="#fff" opacity=".12"/>
+      <circle cx="135" cy="565" r="225" fill="#020617" opacity=".20"/>
+      <path d="M70 520 C180 410 252 455 340 330 C440 188 555 188 806 92" stroke="#fff" stroke-width="22" opacity=".10" fill="none"/>
+      <rect x="92" y="82" width="716" height="512" rx="40" fill="#020617" opacity=".50" filter="url(#shadow)"/>
+      <g transform="translate(0 0)" filter="url(#shadow)">
+        ${iconSvg}
+      </g>
+      <text x="450" y="92" text-anchor="middle" fill="#e0e7ff" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="900" letter-spacing="6">${escapeXml(theme.label)}</text>
+      <text x="450" y="514" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="50" font-weight="900">${escapeXml(name)}</text>
+      <text x="450" y="560" text-anchor="middle" fill="#dbeafe" font-family="Inter,Arial,sans-serif" font-size="21" font-weight="800" letter-spacing="4">${escapeXml(subtitle || initials)}</text>
     </svg>`;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 };
 
 const withGameLogo = (doc) => ({
   ...doc,
-  image_url: buildGameLogoDataUrl(doc),
+  image_url: isGenericCatalogImage(doc.image_url) ? buildGameLogoDataUrl(doc) : doc.image_url,
 });
 
 const sanitizeOrder = (doc) => ({
@@ -735,6 +943,29 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/currency/rates', async (_req, res) => {
+  try {
+    const rateData = await getFreshCurrencyRates();
+    res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=21600');
+    res.json({
+      base: 'MYR',
+      rates: rateData.rates,
+      supported: supportedCurrencyCodes,
+      source: rateData.source,
+      updated_at: new Date(rateData.fetchedAt || Date.now()).toISOString(),
+    });
+  } catch (error) {
+    res.json({
+      base: 'MYR',
+      rates: fallbackRatesFromMyr,
+      supported: supportedCurrencyCodes,
+      source: 'fallback',
+      message: error.message,
+      updated_at: new Date().toISOString(),
+    });
   }
 });
 
