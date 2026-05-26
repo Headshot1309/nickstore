@@ -832,10 +832,16 @@ app.get('/api/stats/popular-games', async (_req, res) => {
         },
       },
       { $sort: { order_count: -1, total_spend: -1 } },
-      { $limit: 5 },
+      { $limit: 50 },
     ]).toArray();
+    const activeGames = await database.collection('games').find({ is_active: true }).toArray();
+    const activeGameIds = new Set(activeGames.map((game) => game._id.toString()));
+    const activeGameNames = new Set(activeGames.map((game) => String(game.name || '').toLowerCase()));
+    const filteredRows = rows
+      .filter((row) => activeGameIds.has(String(row._id?.game_id || '')) || activeGameNames.has(String(row._id?.game_name || '').toLowerCase()))
+      .slice(0, 5);
 
-    res.json({ documents: normalizePopularRows(rows), total: rows.length });
+    res.json({ documents: normalizePopularRows(filteredRows), total: filteredRows.length });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
