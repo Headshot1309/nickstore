@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useOrders } from '@/hooks/useOrders';
 import type { Order } from '@/types';
-import { getOrderWhatsAppLink, getSupportWhatsAppLink } from '@/lib/orderSharing';
+// Removed unused imports from orderSharing
 
 const OrderSuccess: React.FC = () => {
   const navigate = useNavigate();
@@ -131,9 +131,11 @@ const OrderSuccess: React.FC = () => {
     return `RM ${numericAmount.toFixed(2)}`;
   };
 
-  const whatsappLink = order
-    ? getOrderWhatsAppLink(order)
-    : getSupportWhatsAppLink(`Hi, I just placed order ${orderNumber}. Please process it ASAP.`);
+  const whatsappNumber = '60137345871';
+  const whatsappMessage = order 
+    ? `Hi, I'm inquiring about my order *${order.order_number}* (Status: ${order.status}).`
+    : `Hi, I just placed order *${orderNumber}*. Please process it ASAP.`;
+  const whatsappLink = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`;
 
   // Status-based UI configuration
   const getStatusConfig = () => {

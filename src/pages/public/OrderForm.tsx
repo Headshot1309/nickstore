@@ -204,7 +204,7 @@ const OrderForm: React.FC = () => {
                           value={formData.userPhone}
                           onChange={(e) => setFormData({ ...formData, userPhone: e.target.value })}
                           placeholder="+60 12-345 6789"
-                          className={`h-12 rounded-xl bg-slate-950 border-slate-700 text-white ${
+                          className={`bg-slate-800 border-slate-700 text-white ${
                             errors.userPhone ? 'border-red-500' : ''
                           }`}
                         />

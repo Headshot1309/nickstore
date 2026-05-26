@@ -12,7 +12,7 @@ import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import type { PaymentMethod } from '@/types';
 import type { ReceiptValidationResult } from '@/lib/receiptValidation';
-import { getSupportWhatsAppLink } from '@/lib/orderSharing';
+// removed unused import getSupportWhatsAppLink
 import { settingsCollection } from '@/lib/mongodb';
 
 type ReceiptCheckState = {
@@ -164,7 +164,9 @@ const Payment: React.FC = () => {
     }
   };
 
-  const whatsappLink = getSupportWhatsAppLink();
+  const whatsappNumber = '60137345871';
+  const whatsappMessage = 'Hi, I need assistance with my order.';
+  const whatsappLink = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`;
 
   if (!game || !product) return null;
 

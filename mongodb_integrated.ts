@@ -73,7 +73,7 @@ const fallbackPaymentMethods = [
     type: 'bank_transfer',
     description: 'Transfer to our bank account and upload your receipt.',
     account_name: 'NickStore',
-    account_number: '1234567890',
+    account_number: '60197661697',
     is_active: true,
     sort_order: 2,
   },

@@ -457,7 +457,7 @@ const PaymentMethods: React.FC = () => {
                   id="account_number"
                   value={formData.account_number}
                   onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
-                  placeholder="e.g., 1234567890"
+                  placeholder="e.g., 60197661697"
                   className="bg-slate-900 border-slate-700 text-white"
                 />
               </div>
