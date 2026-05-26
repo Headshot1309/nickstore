@@ -41,7 +41,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ className = '' }) =>
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const showInstallHelp = () => {
-    alert('To download the admin panel as an app: on Android/Chrome use Install App from the browser menu. On iPhone/iPad open Safari, tap Share, then Add to Home Screen.');
+    alert('To install the separate admin app: open this admin page on your phone. On Android/Chrome use Install App from the browser menu. On iPhone/iPad open Safari, tap Share, then Add to Home Screen. It will open straight to the admin panel.');
   };
 
   const NavContent = () => (

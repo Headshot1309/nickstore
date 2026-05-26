@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CustomerProvider, useCustomer } from '@/contexts/CustomerContext';
@@ -52,6 +52,32 @@ const ProtectedCustomerRoute: React.FC<{ children: React.ReactNode }> = ({ child
   return <>{children}</>;
 };
 
+const RouteManifestUpdater: React.FC = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    const isAdminRoute = location.pathname.startsWith('/admin');
+    const manifestHref = isAdminRoute ? '/admin-manifest.webmanifest' : '/manifest.webmanifest';
+    let manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+
+    if (!manifestLink) {
+      manifestLink = document.createElement('link');
+      manifestLink.rel = 'manifest';
+      document.head.appendChild(manifestLink);
+    }
+
+    manifestLink.href = manifestHref;
+    document.title = isAdminRoute ? 'NickStore Admin' : 'NickStore - Game Top Up';
+
+    const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
+    if (appleTitle) {
+      appleTitle.content = isAdminRoute ? 'NS Admin' : 'NickStore';
+    }
+  }, [location.pathname]);
+
+  return null;
+};
+
 function App() {
   // Check if we're on mobile device
   const isMobile = () => {
@@ -70,6 +96,7 @@ function App() {
       <CustomerProvider>
         <PreferenceProvider>
           <BrowserRouter>
+            <RouteManifestUpdater />
             <Routes>
             {/* Public Routes */}
             <Route path="/" element={<Home />} />

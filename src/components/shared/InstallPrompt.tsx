@@ -1,11 +1,14 @@
 // components/shared/InstallPrompt.tsx
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
 
 const InstallPrompt: React.FC = () => {
+  const location = useLocation();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showPrompt, setShowPrompt] = useState(false);
+  const isAdminRoute = location.pathname.startsWith('/admin');
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -47,9 +50,13 @@ const InstallPrompt: React.FC = () => {
             <Download className="w-5 h-5 text-violet-400" />
           </div>
           <div className="flex-1">
-            <h4 className="text-white font-medium">Install NickStore App</h4>
+            <h4 className="text-white font-medium">
+              {isAdminRoute ? 'Install NickStore Admin' : 'Install NickStore App'}
+            </h4>
             <p className="text-slate-400 text-sm mt-1">
-              Install our app for a better experience! Quick access, offline support, and more.
+              {isAdminRoute
+                ? 'Install a separate admin app that opens straight to your dashboard.'
+                : 'Install our app for quick access, offline support, and a smoother mobile experience.'}
             </p>
             <div className="flex gap-2 mt-3">
               <Button

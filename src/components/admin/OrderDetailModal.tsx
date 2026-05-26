@@ -84,7 +84,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto rounded-2xl border-slate-800 bg-slate-950 p-4 text-white animate-slide-up sm:p-6">
+      <DialogContent className="z-[100] max-h-[92dvh] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto rounded-2xl border-slate-800 bg-slate-950 p-4 text-white sm:p-6">
         <DialogHeader>
           <div className="flex items-center justify-between gap-8">
             <DialogTitle className="text-xl font-bold bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent sm:text-2xl">
