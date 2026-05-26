@@ -1784,6 +1784,43 @@ app.get('/api/admin/customers/:id/orders', requireAdmin, async (req, res) => {
   }
 });
 
+app.put('/api/admin/customers/:id/password', requireAdmin, async (req, res) => {
+  try {
+    const database = await getDb();
+    const customerId = safeString(req.params.id, 80);
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+
+    if (!ObjectId.isValid(customerId)) {
+      return res.status(400).json({ success: false, message: 'Invalid customer ID.' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 8 characters.' });
+    }
+
+    const _id = toObjectId(customerId);
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await database.collection('customers').updateOne(
+      { _id },
+      { $set: { passwordHash, updated_at: new Date() } }
+    );
+
+    if (!result.matchedCount) {
+      return res.status(404).json({ success: false, message: 'Customer not found.' });
+    }
+
+    await database.collection('customer_sessions').deleteMany({ customer_id: _id });
+    await database.collection('customer_2fa_challenges').updateMany(
+      { customer_id: _id, used: false },
+      { $set: { used: true, usedAt: new Date(), invalidatedByAdmin: true } }
+    );
+
+    res.json({ success: true, message: 'Customer password reset. Their active sessions were logged out.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 app.post('/api/orders', orderRateLimit, async (req, res) => {
   try {
     const database = await getDb();

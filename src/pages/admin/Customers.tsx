@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Mail, Phone, RefreshCw, Search, ShoppingCart, UserRound, Users } from 'lucide-react';
+import { Calendar, KeyRound, Mail, Phone, RefreshCw, Search, ShoppingCart, UserRound, Users } from 'lucide-react';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,9 @@ const Customers: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [ordersLoading, setOrdersLoading] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [newPassword, setNewPassword] = React.useState('');
+  const [passwordResetting, setPasswordResetting] = React.useState(false);
+  const [passwordMessage, setPasswordMessage] = React.useState('');
 
   const loadCustomers = React.useCallback(async () => {
     setLoading(true);
@@ -65,12 +68,34 @@ const Customers: React.FC = () => {
       return;
     }
 
+    setNewPassword('');
+    setPasswordMessage('');
     setOrdersLoading(true);
     customersCollection.orders(selectedCustomer.$id)
       .then((response) => setCustomerOrders((response.documents || []) as Order[]))
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load customer orders.'))
       .finally(() => setOrdersLoading(false));
   }, [selectedCustomer]);
+
+  const resetCustomerPassword = async () => {
+    if (!selectedCustomer?.$id) return;
+    if (newPassword.length < 8) {
+      setPasswordMessage('Password must be at least 8 characters.');
+      return;
+    }
+
+    setPasswordResetting(true);
+    setPasswordMessage('');
+    try {
+      const response = await customersCollection.resetPassword(selectedCustomer.$id, newPassword);
+      setNewPassword('');
+      setPasswordMessage(response.message || 'Password reset. Customer sessions were logged out.');
+    } catch (err) {
+      setPasswordMessage(err instanceof Error ? err.message : 'Could not reset password.');
+    } finally {
+      setPasswordResetting(false);
+    }
+  };
 
   const filteredCustomers = React.useMemo(() => {
     const query = search.toLowerCase().trim();
@@ -203,6 +228,36 @@ const Customers: React.FC = () => {
                   </div>
 
                   <div className="p-4">
+                    <div className="mb-5 rounded-xl border border-slate-800 bg-slate-950/45 p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <KeyRound className="h-4 w-4 text-cyan-300" />
+                        <h3 className="font-semibold text-white">Reset customer password</h3>
+                      </div>
+                      <p className="mb-3 text-xs text-slate-400">
+                        Passwords are securely hashed and cannot be viewed. Set a new password here when a customer needs help signing in.
+                      </p>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Input
+                          type="text"
+                          value={newPassword}
+                          onChange={(event) => setNewPassword(event.target.value)}
+                          placeholder="New password, minimum 8 characters"
+                          className="h-11 rounded-xl border-slate-700 bg-slate-900 text-white"
+                        />
+                        <Button
+                          type="button"
+                          onClick={resetCustomerPassword}
+                          disabled={passwordResetting || newPassword.length < 8}
+                          className="h-11 shrink-0 bg-cyan-500 text-white hover:bg-cyan-400"
+                        >
+                          {passwordResetting ? 'Resetting...' : 'Reset Password'}
+                        </Button>
+                      </div>
+                      {passwordMessage && (
+                        <p className="mt-2 text-xs text-slate-300">{passwordMessage}</p>
+                      )}
+                    </div>
+
                     <h3 className="mb-3 font-semibold text-white">Order history</h3>
                     {ordersLoading ? (
                       <div className="py-16 text-center text-sm text-slate-400">Loading order history...</div>

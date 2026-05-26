@@ -27,6 +27,7 @@ interface StoredCustomerSession {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const API_TIMEOUT_MS = 15000;
 
 const makeId = (prefix = 'id') => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -141,6 +142,8 @@ export const apiRequest = async <T>(path: string, options?: RequestInit): Promis
   const adminSession = readAdminSession();
   const customerSession = readCustomerSession();
   const headers = new Headers(options?.headers);
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
   if (adminSession?.token) {
     headers.set('Authorization', `Bearer ${adminSession.token}`);
@@ -149,10 +152,21 @@ export const apiRequest = async <T>(path: string, options?: RequestInit): Promis
     headers.set('X-Customer-Session', customerSession.token);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+      signal: options?.signal || controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Request timed out. Please refresh and try again.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => null);
@@ -289,6 +303,11 @@ export const customersCollection = {
     apiRequest<ApiListResponse<any>>('/api/admin/customers'),
   orders: async (customerId: string) =>
     apiRequest<ApiListResponse<any>>(`/api/admin/customers/${encodeURIComponent(customerId)}/orders`),
+  resetPassword: async (customerId: string, password: string) =>
+    apiRequest<{ success: boolean; message?: string }>(`/api/admin/customers/${encodeURIComponent(customerId)}/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password }),
+    }),
 };
 
 export const ordersCollection = {

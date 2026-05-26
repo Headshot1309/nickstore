@@ -17,7 +17,7 @@ const OrderNotification: React.FC = () => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<OrderNotificationItem[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [knownOrderIds, setKnownOrderIds] = useState<Set<string>>(new Set());
+  const knownOrderIdsRef = React.useRef<Set<string>>(new Set());
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationSupported, setNotificationSupported] = useState(true);
 
@@ -29,6 +29,9 @@ const OrderNotification: React.FC = () => {
 
   // Function to request notification permission (requires user interaction on mobile)
   const requestNotificationPermission = async () => {
+    if (!notificationSupported || !('Notification' in window)) {
+      return false;
+    }
     if (notificationSupported && Notification.permission === 'default') {
       const permission = await Notification.requestPermission();
       console.log('Notification permission:', permission);
@@ -45,7 +48,7 @@ const OrderNotification: React.FC = () => {
       const newOrders = notify
         ? currentOrders.filter((order: any) => {
           const id = order.$id || order.order_number;
-          return id && !knownOrderIds.has(id);
+          return id && !knownOrderIdsRef.current.has(id);
         })
         : [];
 
@@ -86,11 +89,11 @@ const OrderNotification: React.FC = () => {
         }
       });
 
-      setKnownOrderIds(currentIds);
+      knownOrderIdsRef.current = currentIds;
     } catch (error) {
       console.error('Notification refresh failed:', error);
     }
-  }, [knownOrderIds, navigate, notificationSupported]);
+  }, [navigate, notificationSupported]);
 
   useEffect(() => {
     refreshNotifications(false);
