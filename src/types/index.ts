@@ -17,6 +17,9 @@ export interface Customer {
   name: string;
   email: string;
   phone?: string;
+  order_count?: number;
+  total_spend?: number;
+  last_order_at?: string | null;
   created_at?: string;
 }
 
@@ -70,6 +73,7 @@ export interface Order {
   payment_method_name: string;
   receipt_image_id?: string;
   receipt_image_url?: string;
+  has_receipt_image?: boolean;
   receipt_validation?: {
     accepted: boolean;
     recipientMatched: boolean;

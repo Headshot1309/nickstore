@@ -284,6 +284,13 @@ export const statsCollection = {
     apiRequest<ApiListResponse<PopularGameStat>>('/api/customer/stats'),
 };
 
+export const customersCollection = {
+  list: async () =>
+    apiRequest<ApiListResponse<any>>('/api/admin/customers'),
+  orders: async (customerId: string) =>
+    apiRequest<ApiListResponse<any>>(`/api/admin/customers/${encodeURIComponent(customerId)}/orders`),
+};
+
 export const ordersCollection = {
   list: async (status?: string) => {
     if (readAdminSession()?.token) {
@@ -298,7 +305,10 @@ export const ordersCollection = {
   get: async (orderId: string) => {
     try {
       return await apiRequest<any>(`/api/orders/${encodeURIComponent(orderId)}`);
-    } catch {
+    } catch (error) {
+      if (readAdminSession()?.token) {
+        throw error;
+      }
       const response = await ordersCollection.list();
       return response.documents.find((order: any) => order.$id === orderId || order.id === orderId || order.order_number === orderId) || null;
     }

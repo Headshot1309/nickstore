@@ -16,6 +16,8 @@ interface OrderDetailModalProps {
   open: boolean;
   onClose: () => void;
   onUpdateStatus?: (orderId: string, status: OrderStatus) => void;
+  loading?: boolean;
+  error?: string;
 }
 
 export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
@@ -23,6 +25,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   open,
   onClose,
   onUpdateStatus,
+  loading = false,
+  error = '',
 }) => {
   const [copied, setCopied] = React.useState(false);
   const [receiptPreviewFailed, setReceiptPreviewFailed] = React.useState(false);
@@ -94,6 +98,18 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         </DialogHeader>
 
         <div className="space-y-6">
+          {loading && (
+            <div className="rounded-xl border border-violet-400/20 bg-violet-500/10 p-3 text-sm text-violet-100">
+              Loading full order details and receipt...
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-100">
+              {error}
+            </div>
+          )}
+
           {/* Order Info with Copy */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="bg-slate-800/50 rounded-xl p-5 transition-all duration-300 hover:bg-slate-800/70">
@@ -241,7 +257,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           </div>
 
           {/* Receipt Image */}
-          {order.receipt_image_url && (
+          {order.receipt_image_url ? (
             <div className="bg-slate-800/50 rounded-xl p-5 transition-all duration-300 hover:bg-slate-800/70">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h4 className="text-sm font-medium text-white">Payment Receipt</h4>
@@ -266,6 +282,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-5 text-sm text-slate-300">
+              {order.has_receipt_image || loading
+                ? 'Receipt is being loaded. If it does not appear, refresh the order details or check the detail loading error above.'
+                : 'No receipt image is attached to this order.'}
             </div>
           )}
 

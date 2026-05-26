@@ -32,6 +32,8 @@ const Orders: React.FC = () => {
   const { orders, loading, error: ordersError, refresh, updateOrderStatus, getOrder } = useAdminOrders();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
   const [isSearching, setIsSearching] = useState(false);
@@ -95,16 +97,23 @@ const Orders: React.FC = () => {
   const handleViewOrder = async (order: Order) => {
     setSelectedOrder(order);
     setDetailOpen(true);
+    setDetailError('');
     const orderId = order.$id || order.order_number;
-    if (!orderId || order.receipt_image_url) return;
+    if (!orderId) return;
 
     try {
+      setDetailLoading(true);
       const fullOrder = await getOrder(orderId);
       if (fullOrder) {
         setSelectedOrder(fullOrder);
+      } else {
+        setDetailError('Order details could not be loaded.');
       }
     } catch (error) {
       console.error('Failed to load full order details:', error);
+      setDetailError(error instanceof Error ? error.message : 'Order details could not be loaded.');
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -275,6 +284,8 @@ const Orders: React.FC = () => {
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         onUpdateStatus={handleUpdateStatus}
+        loading={detailLoading}
+        error={detailError}
       />
     </div>
   );

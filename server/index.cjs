@@ -831,6 +831,7 @@ const sanitizeAdminOrderSummary = (doc) => ({
 const sanitizeAdminOrderDetail = (doc) => ({
   ...doc,
   $id: doc._id.toString(),
+  has_receipt_image: Boolean(doc.receipt_image_url),
 });
 
 const formatOrderDate = (dateValue) => {
@@ -1699,6 +1700,85 @@ app.get('/api/orders/:id', async (req, res) => {
     }
 
     return res.json(sanitizeOrder(order));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/customers', requireAdmin, async (_req, res) => {
+  try {
+    const database = await getDb();
+    const customers = await database.collection('customers').aggregate([
+      {
+        $lookup: {
+          from: 'orders',
+          localField: '_id',
+          foreignField: 'customer_id',
+          as: 'orders',
+        },
+      },
+      {
+        $addFields: {
+          order_count: { $size: '$orders' },
+          total_spend: {
+            $sum: {
+              $map: {
+                input: '$orders',
+                as: 'order',
+                in: {
+                  $convert: {
+                    input: '$$order.total_amount',
+                    to: 'double',
+                    onError: 0,
+                    onNull: 0,
+                  },
+                },
+              },
+            },
+          },
+          last_order_at: { $max: '$orders.created_at' },
+        },
+      },
+      { $sort: { last_order_at: -1, created_at: -1 } },
+      {
+        $project: {
+          passwordHash: 0,
+          orders: 0,
+        },
+      },
+    ]).toArray();
+
+    res.json({
+      documents: customers.map((customer) => ({
+        ...sanitizeCustomer(customer),
+        order_count: customer.order_count || 0,
+        total_spend: Number(customer.total_spend || 0),
+        last_order_at: customer.last_order_at || null,
+      })),
+      total: customers.length,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/customers/:id/orders', requireAdmin, async (req, res) => {
+  try {
+    const database = await getDb();
+    const customerId = safeString(req.params.id, 80);
+    if (!ObjectId.isValid(customerId)) {
+      return res.status(400).json({ success: false, message: 'Invalid customer ID.' });
+    }
+
+    const orders = await database.collection('orders')
+      .find({ customer_id: toObjectId(customerId) })
+      .sort({ created_at: -1 })
+      .toArray();
+
+    res.json({
+      documents: orders.map(sanitizeAdminOrderSummary),
+      total: orders.length,
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

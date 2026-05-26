@@ -22,6 +22,7 @@ import CustomerAccount from '@/pages/public/CustomerAccount';
 import AdminLogin from '@/pages/admin/Login';
 import AdminDashboard from '@/pages/admin/Dashboard';
 import AdminOrders from '@/pages/admin/Orders';
+import AdminCustomers from '@/pages/admin/Customers';
 import AdminGames from '@/pages/admin/Games';
 import AdminProducts from '@/pages/admin/Products';
 import AdminPaymentMethods from '@/pages/admin/PaymentMethods';
@@ -97,6 +98,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <AdminOrders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/customers"
+            element={
+              <ProtectedRoute>
+                <AdminCustomers />
               </ProtectedRoute>
             }
           />

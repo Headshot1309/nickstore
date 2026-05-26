@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, X, ShoppingCart, Check } from 'lucide-react';
-import { useAdminOrders } from '@/hooks/useOrders';
+import { ordersCollection } from '@/lib/mongodb';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
@@ -15,10 +15,9 @@ interface OrderNotificationItem {
 
 const OrderNotification: React.FC = () => {
   const navigate = useNavigate();
-  const { orders, refresh } = useAdminOrders();
   const [notifications, setNotifications] = useState<OrderNotificationItem[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [previousOrdersCount, setPreviousOrdersCount] = useState(0);
+  const [knownOrderIds, setKnownOrderIds] = useState<Set<string>>(new Set());
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationSupported, setNotificationSupported] = useState(true);
 
@@ -38,24 +37,19 @@ const OrderNotification: React.FC = () => {
     return Notification.permission === 'granted';
   };
 
-  // Refresh orders periodically
-  useEffect(() => {
-    refresh();
-    const interval = setInterval(() => {
-      refresh();
-    }, 10000);
-    
-    return () => clearInterval(interval);
-  }, [refresh]);
+  const refreshNotifications = React.useCallback(async (notify = false) => {
+    try {
+      const response = await ordersCollection.list();
+      const currentOrders = response.documents || [];
+      const currentIds = new Set(currentOrders.map((order: any) => order.$id || order.order_number).filter(Boolean));
+      const newOrders = notify
+        ? currentOrders.filter((order: any) => {
+          const id = order.$id || order.order_number;
+          return id && !knownOrderIds.has(id);
+        })
+        : [];
 
-  // Check for new orders
-  useEffect(() => {
-    const currentCount = orders.length;
-    
-    if (currentCount > previousOrdersCount && previousOrdersCount > 0) {
-      const newOrders = orders.slice(0, currentCount - previousOrdersCount);
-      
-      newOrders.forEach(async (order) => {
+      newOrders.slice(0, 5).forEach(async (order: any) => {
         const notification: OrderNotificationItem = {
           id: order.$id!,
           orderNumber: order.order_number,
@@ -91,14 +85,28 @@ const OrderNotification: React.FC = () => {
           }
         }
       });
+
+      setKnownOrderIds(currentIds);
+    } catch (error) {
+      console.error('Notification refresh failed:', error);
     }
-    
-    setPreviousOrdersCount(currentCount);
-  }, [orders, previousOrdersCount, notificationSupported, navigate]);
+  }, [knownOrderIds, navigate, notificationSupported]);
+
+  useEffect(() => {
+    refreshNotifications(false);
+    const interval = setInterval(() => {
+      refreshNotifications(true);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [refreshNotifications]);
 
   const handleBellClick = async () => {
     if (notificationSupported && Notification.permission === 'default') {
       await requestNotificationPermission();
+    }
+    if (!showDropdown) {
+      refreshNotifications(false);
     }
     setShowDropdown(!showDropdown);
   };
