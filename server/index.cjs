@@ -815,12 +815,18 @@ app.post('/api/catalog/prune-to-pricelist', async (_req, res) => {
     const existingGames = await database.collection('games').find({}).toArray();
     const existingGameIds = new Set(existingGames.map((game) => String(game._id)));
 
-    for (const id of supplierStringGameIds) {
+    for (const id of supplierGameIds) {
       if (existingGameIds.has(id)) continue;
       const sampleProduct = supplierProductsByGameId[id]?.[0];
       const catalogGame = marketCatalogGames.find((game) => game.key === sampleProduct?.provider_slug);
+      let gameId = id;
+      try {
+        gameId = new ObjectId(id);
+      } catch {
+        gameId = id;
+      }
       await database.collection('games').insertOne({
-        _id: id,
+        _id: gameId,
         name: catalogGame?.name || sampleProduct?.game_name || sampleProduct?.provider_slug || id,
         description: catalogGame?.description || `Imported pricelist catalog for ${sampleProduct?.game_name || id}.`,
         image_id: '',
