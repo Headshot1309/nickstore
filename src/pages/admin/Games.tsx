@@ -26,6 +26,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import type { Game } from '@/types';
@@ -35,6 +42,7 @@ const Games: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const { games, loading, createGame, updateGame, deleteGame } = useAdminGames();
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGame, setEditingGame] = useState<Game | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -76,9 +84,12 @@ const Games: React.FC = () => {
 
   const filteredGames = useMemo(() => {
     return games.filter((game) =>
-      game.name.toLowerCase().includes(searchQuery.toLowerCase())
+      game.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      (statusFilter === 'all' ||
+        (statusFilter === 'active' && game.is_active) ||
+        (statusFilter === 'inactive' && !game.is_active))
     );
-  }, [games, searchQuery]);
+  }, [games, searchQuery, statusFilter]);
 
   const handleOpenModal = (game?: Game) => {
     console.log('Opening modal', game);
@@ -193,18 +204,30 @@ const Games: React.FC = () => {
           </div>
 
           {/* Search with animation */}
-          <div className="relative mb-8 animate-fade-in-up animation-delay-100">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 transition-all duration-300" />
-            <Input
-              placeholder="Search games..."
-              onChange={handleSearchChange}
-              className="pl-12 py-6 bg-slate-900/50 border-slate-700 text-white text-lg rounded-xl transition-all duration-300 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
-            />
-            {isSearching && (
-              <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                <div className="w-5 h-5 border-2 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
-              </div>
-            )}
+          <div className="mb-8 grid gap-3 animate-fade-in-up animation-delay-100 sm:grid-cols-[1fr_190px]">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 transition-all duration-300" />
+              <Input
+                placeholder="Search games..."
+                onChange={handleSearchChange}
+                className="pl-12 py-6 bg-slate-900/50 border-slate-700 text-white text-lg rounded-xl transition-all duration-300 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
+              />
+              {isSearching && (
+                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                  <div className="w-5 h-5 border-2 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'active' | 'inactive')}>
+              <SelectTrigger className="h-12 rounded-xl border-slate-700 bg-slate-900/50 text-white">
+                <SelectValue placeholder="Filter status" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 border-slate-700">
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active Only</SelectItem>
+                <SelectItem value="inactive">Inactive Only</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Stats Badge */}

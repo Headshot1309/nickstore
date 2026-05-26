@@ -181,6 +181,9 @@ const applyMarkup = (costPrice, markupPercent = 0) => {
 const getProductCost = (product) =>
   Number(product.cost_price ?? product.market_reference?.observed_price ?? product.price ?? 0);
 
+const isSupplierPricelistProduct = (product) =>
+  product?.market_reference?.source === 'Topup_Kryz_bot' || Boolean(product?.supplier_code);
+
 const formatOrderDate = (dateValue) => {
   try {
     return new Date(dateValue || Date.now()).toLocaleString('en-MY', {
@@ -345,7 +348,7 @@ app.post('/api/auth/login', async (req, res) => {
           success: true,
           requires_2fa: true,
           challenge_id: challengeId,
-          message: `Verification code sent to ${adminEmail}`,
+          message: 'Verification code sent to the configured admin email.',
         });
       }
 
@@ -770,6 +773,76 @@ app.post('/api/catalog/markup', async (req, res) => {
       markup_percent: markupPercent,
       updated_products: products.length,
       message: `Applied ${markupPercent}% markup to ${products.length} product${products.length === 1 ? '' : 's'}.`,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/catalog/prune-to-pricelist', async (_req, res) => {
+  try {
+    const database = await getDb();
+    const now = new Date();
+    const supplierProducts = await database.collection('products').find({
+      $or: [
+        { 'market_reference.source': 'Topup_Kryz_bot' },
+        { supplier_code: { $exists: true, $ne: '' } },
+      ],
+    }).toArray();
+    const supplierGameIds = new Set(
+      supplierProducts
+        .map((product) => String(product.game_id || ''))
+        .filter(Boolean)
+    );
+    const supplierGameObjectIds = Array.from(supplierGameIds)
+      .map((id) => {
+        try {
+          return new ObjectId(id);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    const productDeleteResult = await database.collection('products').deleteMany({
+      $or: [
+        {
+          $and: [
+            { 'market_reference.source': { $ne: 'Topup_Kryz_bot' } },
+            { supplier_code: { $exists: false } },
+          ],
+        },
+        { game_id: { $nin: Array.from(supplierGameIds) } },
+      ],
+    });
+
+    const gameDeleteQuery = supplierGameObjectIds.length > 0
+      ? { _id: { $nin: supplierGameObjectIds } }
+      : {};
+    const gameDeleteResult = await database.collection('games').deleteMany(gameDeleteQuery);
+
+    await database.collection('games').updateMany(
+      { _id: { $in: supplierGameObjectIds } },
+      { $set: { is_active: true, updated_at: now } }
+    );
+
+    await database.collection('products').updateMany(
+      {
+        $or: [
+          { 'market_reference.source': 'Topup_Kryz_bot' },
+          { supplier_code: { $exists: true, $ne: '' } },
+        ],
+      },
+      { $set: { is_active: true, updated_at: now } }
+    );
+
+    res.json({
+      success: true,
+      kept_games: supplierGameIds.size,
+      kept_supplier_products: supplierProducts.filter(isSupplierPricelistProduct).length,
+      deleted_games: gameDeleteResult.deletedCount || 0,
+      deleted_products: productDeleteResult.deletedCount || 0,
+      message: `Kept ${supplierGameIds.size} pricelist games and removed ${gameDeleteResult.deletedCount || 0} other games.`,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

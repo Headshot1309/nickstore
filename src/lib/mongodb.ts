@@ -80,6 +80,8 @@ const fallbackPaymentMethods = [
 ];
 
 const localOrdersKey = 'nickstore_orders';
+const adminSessionKey = 'adminSession';
+const ADMIN_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 const readLocalOrders = () => {
   try {
@@ -184,6 +186,28 @@ export const productsCollection = {
     mutation('/api/catalog/markup', 'POST', data, () => ({ success: true, updated_products: 0, message: 'Markup updated.' })),
 };
 
+const saveAdminSession = (user: { $id: string; email: string; name: string }) => {
+  localStorage.setItem(adminSessionKey, JSON.stringify({
+    user,
+    lastActivityAt: Date.now(),
+  }));
+};
+
+export const touchAdminSession = () => {
+  const session = localStorage.getItem(adminSessionKey);
+  if (!session) return;
+
+  try {
+    const parsed = JSON.parse(session);
+    localStorage.setItem(adminSessionKey, JSON.stringify({
+      ...parsed,
+      lastActivityAt: Date.now(),
+    }));
+  } catch {
+    localStorage.removeItem(adminSessionKey);
+  }
+};
+
 export const ordersCollection = {
   list: async (status?: string) => {
     const localOrders = readLocalOrders();
@@ -275,9 +299,14 @@ export const generateOrderNumber = (): string => {
 
 export const account = {
   get: async () => {
-    const session = localStorage.getItem('adminSession');
+    const session = localStorage.getItem(adminSessionKey);
     if (session) {
-      return JSON.parse(session);
+      const parsed = JSON.parse(session);
+      if (!parsed?.user || Date.now() - Number(parsed.lastActivityAt || 0) > ADMIN_IDLE_TIMEOUT_MS) {
+        localStorage.removeItem(adminSessionKey);
+        throw new Error('Session expired');
+      }
+      return parsed.user;
     }
     throw new Error('No session found');
   },
@@ -305,7 +334,7 @@ export const account = {
       throw new Error(response.message || 'Invalid credentials');
     }
 
-    localStorage.setItem('adminSession', JSON.stringify(response.user));
+    saveAdminSession(response.user);
     return response.user;
   },
   verifyEmailCode: async (challengeId: string, code: string) => {
@@ -318,11 +347,11 @@ export const account = {
       throw new Error(response.message || 'Invalid verification code');
     }
 
-    localStorage.setItem('adminSession', JSON.stringify(response.user));
+    saveAdminSession(response.user);
     return response.user;
   },
   deleteSession: async (_sessionId: string) => {
-    localStorage.removeItem('adminSession');
+    localStorage.removeItem(adminSessionKey);
     return { success: true };
   },
 };

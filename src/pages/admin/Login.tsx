@@ -25,7 +25,6 @@ const Login: React.FC = () => {
     const checkCurrentAuth = async () => {
       try {
         const user = await account.get();
-        console.log('Already logged in as:', user.email);
         if (user) {
           navigate('/admin');
         }
@@ -49,7 +48,6 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      console.log('Submitting login for:', email);
       if (requires2fa) {
         await verifyLoginCode(challengeId, verificationCode);
         navigate('/admin');
@@ -63,10 +61,8 @@ const Login: React.FC = () => {
         setError('');
         return;
       }
-      console.log('Login successful, redirecting...');
       navigate('/admin');
     } catch (err: unknown) {
-      console.error('Login error in component:', err);
       setError(err instanceof Error ? err.message : 'Invalid email or password');
     } finally {
       setLoading(false);
@@ -104,7 +100,7 @@ const Login: React.FC = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Headshot1309@gmail.com"
+                  placeholder="Enter admin email"
                   className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
                   required
                   autoComplete="email"
@@ -177,10 +173,8 @@ const Login: React.FC = () => {
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-slate-500">
-            <p>Admin access:</p>
-            <p className="font-mono text-xs">Headshot1309@gmail.com</p>
-            <p className="text-xs">Use the configured admin password.</p>
+          <div className="mt-6 text-center text-xs text-slate-500">
+            Use your private admin credentials.
           </div>
         </div>
 

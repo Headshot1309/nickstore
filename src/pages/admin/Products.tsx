@@ -44,6 +44,7 @@ const Products: React.FC = () => {
   const { games, loading: gamesLoading } = useAdminGames();
   const [searchQuery, setSearchQuery] = useState('');
   const [gameFilter, setGameFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -83,8 +84,12 @@ const Products: React.FC = () => {
       product.denomination.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesGame = gameFilter === 'all' || product.game_id === gameFilter;
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'active' && product.is_active) ||
+      (statusFilter === 'inactive' && !product.is_active);
 
-    return matchesSearch && matchesGame;
+    return matchesSearch && matchesGame && matchesStatus;
   });
 
   const activeProducts = products.filter((product) => product.is_active).length;
@@ -366,6 +371,16 @@ const Products: React.FC = () => {
                     {game.name}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'active' | 'inactive')}>
+              <SelectTrigger className="w-full sm:w-44 bg-slate-900/50 border-slate-700 text-white">
+                <SelectValue placeholder="Filter status" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 border-slate-700">
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active Only</SelectItem>
+                <SelectItem value="inactive">Inactive Only</SelectItem>
               </SelectContent>
             </Select>
           </div>
