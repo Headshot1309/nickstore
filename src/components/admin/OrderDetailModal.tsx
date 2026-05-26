@@ -80,10 +80,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-950 border-slate-800 text-white animate-slide-up">
+      <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto rounded-2xl border-slate-800 bg-slate-950 p-4 text-white animate-slide-up sm:p-6">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
+          <div className="flex items-center justify-between gap-8">
+            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent sm:text-2xl">
               Order Details
             </DialogTitle>
             <StatusBadge status={order.status} />
@@ -95,7 +95,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
         <div className="space-y-6">
           {/* Order Info with Copy */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="bg-slate-800/50 rounded-xl p-5 transition-all duration-300 hover:bg-slate-800/70">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm text-slate-400">Order Number</p>
@@ -130,7 +130,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               <Gamepad2 className="w-5 h-5 text-violet-400" />
               <h4 className="text-sm font-medium text-white">Game Information</h4>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <p className="text-sm text-slate-500">Game</p>
                 <p className="text-white font-medium">{order.game_name}</p>
@@ -156,7 +156,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               <User className="w-5 h-5 text-fuchsia-400" />
               <h4 className="text-sm font-medium text-white">User Details</h4>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <p className="text-sm text-slate-500">Game ID</p>
                 <p className="text-white font-medium font-mono text-sm">{order.user_game_id}</p>
@@ -194,7 +194,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               <CreditCard className="w-5 h-5 text-emerald-400" />
               <h4 className="text-sm font-medium text-white">Payment Information</h4>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <p className="text-sm text-slate-500">Payment Method</p>
                 <p className="text-white font-medium">{order.payment_method_name}</p>
@@ -248,7 +248,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 <a href={order.receipt_image_url} download={`receipt-${order.order_number}.jpg`}>
                   <Button variant="secondary" size="sm" className="gap-2 bg-slate-800/90 hover:bg-slate-700">
                     <Download className="w-4 h-4" />
-                    Download
+                    <span className="hidden sm:inline">Download</span>
                   </Button>
                 </a>
               </div>
@@ -257,7 +257,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <img
                     src={order.receipt_image_url}
                     alt="Payment Receipt"
-                    className="max-w-full rounded-lg border border-slate-700 transition-all duration-300 group-hover:shadow-xl"
+                    className="max-h-[70dvh] w-full rounded-lg border border-slate-700 object-contain transition-all duration-300 group-hover:shadow-xl"
                     onError={() => setReceiptPreviewFailed(true)}
                   />
                 ) : (
@@ -278,7 +278,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           )}
 
           {/* Actions */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-800">
+          <div className="flex flex-col gap-3 border-t border-slate-800 pt-4 sm:flex-row">
             {order.status === 'pending' && onUpdateStatus && (
               <div className="flex gap-3 flex-1">
                 <Button

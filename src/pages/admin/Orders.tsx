@@ -29,7 +29,7 @@ const statusIcons = {
 const Orders: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const { orders, loading, refresh, updateOrderStatus } = useAdminOrders();
+  const { orders, loading, error: ordersError, refresh, updateOrderStatus, getOrder } = useAdminOrders();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,9 +92,20 @@ const Orders: React.FC = () => {
     return counts;
   }, [orders]);
 
-  const handleViewOrder = (order: Order) => {
+  const handleViewOrder = async (order: Order) => {
     setSelectedOrder(order);
     setDetailOpen(true);
+    const orderId = order.$id || order.order_number;
+    if (!orderId || order.receipt_image_url) return;
+
+    try {
+      const fullOrder = await getOrder(orderId);
+      if (fullOrder) {
+        setSelectedOrder(fullOrder);
+      }
+    } catch (error) {
+      console.error('Failed to load full order details:', error);
+    }
   };
 
   const handleUpdateStatus = async (orderId: string, status: OrderStatus) => {
@@ -165,6 +176,12 @@ const Orders: React.FC = () => {
           </div>
 
           {/* Results count */}
+          {ordersError && (
+            <div className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+              Could not load orders: {ordersError}. Please log in again, then tap Refresh.
+            </div>
+          )}
+
           {!loading && filteredOrders.length > 0 && (
             <div className="mb-4 text-sm text-slate-500">
               Found {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}

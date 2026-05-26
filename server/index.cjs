@@ -821,6 +821,18 @@ const sanitizeOrder = (doc) => ({
   updated_at: doc.updated_at,
 });
 
+const sanitizeAdminOrderSummary = (doc) => ({
+  ...doc,
+  $id: doc._id.toString(),
+  receipt_image_url: doc.receipt_image_url ? '' : '',
+  has_receipt_image: Boolean(doc.receipt_image_url),
+});
+
+const sanitizeAdminOrderDetail = (doc) => ({
+  ...doc,
+  $id: doc._id.toString(),
+});
+
 const formatOrderDate = (dateValue) => {
   try {
     return new Date(dateValue || Date.now()).toLocaleString('en-MY', {
@@ -1651,13 +1663,42 @@ app.get('/api/orders', async (req, res) => {
 
     const query = orderNumber
       ? { order_number: orderNumber }
-      : customerSession
-        ? { customer_id: customerSession.customer_id }
-        : {};
+      : isAdmin
+        ? {}
+        : { customer_id: customerSession.customer_id };
     const orders = await database.collection('orders').find(query).sort({ created_at: -1 }).toArray();
     res.json({
-      documents: orders.map((doc) => isAdmin ? ({ ...doc, $id: doc._id.toString() }) : sanitizeOrder(doc)),
+      documents: orders.map((doc) => isAdmin ? sanitizeAdminOrderSummary(doc) : sanitizeOrder(doc)),
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/orders/:id', async (req, res) => {
+  try {
+    const database = await getDb();
+    const isAdmin = Boolean(await getAdminSessionFromRequest(req));
+    const customerSession = await getCustomerSessionFromRequest(req);
+    const id = safeString(req.params.id, 80);
+    const query = ObjectId.isValid(id)
+      ? { _id: toObjectId(id) }
+      : { order_number: id };
+
+    const order = await database.collection('orders').findOne(query);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found.' });
+    }
+
+    if (isAdmin) {
+      return res.json(sanitizeAdminOrderDetail(order));
+    }
+
+    if (customerSession && String(order.customer_id || '') === String(customerSession.customer_id || '')) {
+      return res.json(sanitizeAdminOrderDetail(order));
+    }
+
+    return res.json(sanitizeOrder(order));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

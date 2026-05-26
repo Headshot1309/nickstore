@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Eye, CheckCircle, XCircle, Clock, ReceiptText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -70,7 +70,66 @@ export const OrderTable: React.FC<OrderTableProps> = ({
   };
 
   return (
-    <div className="overflow-x-auto">
+    <>
+    <div className="space-y-3 p-3 md:hidden">
+      {orders.map((order) => (
+        <article key={order.$id || order.order_number} className="rounded-2xl border border-slate-800 bg-slate-950/55 p-4 shadow-lg shadow-black/15">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate font-mono text-sm font-semibold text-white">{order.order_number}</p>
+              <p className="mt-1 truncate text-sm text-slate-400">{order.game_name}</p>
+            </div>
+            <StatusBadge status={order.status} />
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-xs text-slate-500">Product</p>
+              <p className="line-clamp-2 font-medium text-slate-200">{order.product_name}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Amount</p>
+              <p className="font-bold text-violet-300">{formatCurrency(order.total_amount)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Game ID</p>
+              <p className="truncate font-mono text-slate-200">{order.user_game_id || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Date</p>
+              <p className="text-slate-300">{formatDate(order.created_at)}</p>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-2">
+            <Button
+              className="h-11 w-full gap-2 bg-violet-500 text-white hover:bg-violet-400"
+              onClick={() => onViewOrder(order)}
+            >
+              <ReceiptText className="h-4 w-4" />
+              View details and receipt
+            </Button>
+            {order.status === 'pending' && onUpdateStatus && (
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  className="border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+                  onClick={() => onUpdateStatus(order.$id!, 'success')}
+                >
+                  Success
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-red-500/40 text-red-300 hover:bg-red-500/10"
+                  onClick={() => onUpdateStatus(order.$id!, 'failed')}
+                >
+                  Failed
+                </Button>
+              </div>
+            )}
+          </div>
+        </article>
+      ))}
+    </div>
+    <div className="hidden overflow-x-auto md:block">
       <Table>
         <TableHeader>
           <TableRow className="border-slate-800 hover:bg-transparent">
@@ -143,5 +202,6 @@ export const OrderTable: React.FC<OrderTableProps> = ({
         </TableBody>
       </Table>
     </div>
+    </>
   );
 };

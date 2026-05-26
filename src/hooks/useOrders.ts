@@ -24,6 +24,9 @@ export const useOrders = () => {
     } catch (err: any) {
       console.error('Fetch orders error:', err);
       setError(err.message || 'Failed to fetch orders');
+      if (/admin session|session expired|request failed: 401|unauthorized/i.test(err.message || '')) {
+        window.location.href = '/admin/login';
+      }
     } finally {
       setLoading(false);
     }
@@ -171,6 +174,15 @@ export const useAdminOrders = () => {
     }
   }, [fetchOrders]);
 
+  const getOrder = useCallback(async (orderId: string) => {
+    try {
+      const doc = await ordersCollection.get(orderId);
+      return doc as unknown as Order;
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to fetch order');
+    }
+  }, []);
+
   const deleteOrder = useCallback(async (orderId: string) => {
     try {
       await ordersCollection.delete(orderId);
@@ -192,7 +204,7 @@ export const useAdminOrders = () => {
     fetchOrders();
   }, [fetchOrders]);
 
-  return { orders, loading, error, refresh: fetchOrders, updateOrderStatus, deleteOrder };
+  return { orders, loading, error, refresh: fetchOrders, getOrder, updateOrderStatus, deleteOrder };
 };
 
 export const useOrderStats = () => {

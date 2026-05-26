@@ -156,6 +156,10 @@ export const apiRequest = async <T>(path: string, options?: RequestInit): Promis
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => null);
+    if (response.status === 401) {
+      if (adminSession?.token) localStorage.removeItem(adminSessionKey);
+      if (customerSession?.token) localStorage.removeItem(customerSessionKey);
+    }
     throw new Error(errorBody?.message || errorBody?.error || `Request failed: ${response.status}`);
   }
 
@@ -282,17 +286,30 @@ export const statsCollection = {
 
 export const ordersCollection = {
   list: async (status?: string) => {
+    if (readAdminSession()?.token) {
+      const query = status ? `?status=${encodeURIComponent(status)}` : '';
+      return apiRequest<ApiListResponse<any>>(`/api/orders${query}`);
+    }
+
     const localOrders = readLocalOrders();
     const fallback = status ? localOrders.filter((order: any) => order.status === status) : localOrders;
     return listFromApi('orders', fallback, status ? `?status=${encodeURIComponent(status)}` : '');
   },
   get: async (orderId: string) => {
-    const response = await ordersCollection.list();
-    return response.documents.find((order: any) => order.$id === orderId || order.id === orderId) || null;
+    try {
+      return await apiRequest<any>(`/api/orders/${encodeURIComponent(orderId)}`);
+    } catch {
+      const response = await ordersCollection.list();
+      return response.documents.find((order: any) => order.$id === orderId || order.id === orderId || order.order_number === orderId) || null;
+    }
   },
   getByOrderNumber: async (orderNumber: string) => {
-    const response = await listFromApi('orders', readLocalOrders(), `?order_number=${encodeURIComponent(orderNumber)}`);
-    return response.documents.find((order: any) => order.order_number === orderNumber) || null;
+    try {
+      return await apiRequest<any>(`/api/orders/${encodeURIComponent(orderNumber)}`);
+    } catch {
+      const response = await listFromApi('orders', readLocalOrders(), `?order_number=${encodeURIComponent(orderNumber)}`);
+      return response.documents.find((order: any) => order.order_number === orderNumber) || null;
+    }
   },
   create: async (data: any) =>
     mutation('/api/orders', 'POST', data, () => {
