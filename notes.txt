@@ -1,0 +1,556 @@
+NICKSTORE EMERGENCY EDIT MANUAL
+Last updated: 2026-05-26
+
+Use this file when you need to change something fast.
+Project folder:
+C:\Users\Firda\Documents\Codex\2026-05-24\hello\nickstore-vercel
+
+Live website:
+https://nickstore-iota.vercel.app
+
+Local app:
+1. Open PowerShell in the project folder.
+2. Run: npm run dev
+3. Open: http://127.0.0.1:5173/
+
+Build check before pushing:
+1. Run: npm run build
+2. If it passes, commit and push.
+
+
+IMPORTANT SECURITY NOTES
+
+Do not put these directly in frontend files:
+- Telegram bot token
+- MongoDB URI
+- Admin password
+- SMTP email password
+- Any supplier/API key
+
+Put secrets in Vercel Environment Variables instead.
+Main secret/env names used by the server:
+- MONGODB_URI
+- TELEGRAM_BOT_TOKEN
+- TELEGRAM_CHAT_ID
+- ADMIN_EMAIL
+- ADMIN_PASSWORD
+- ADMIN_2FA_ENABLED
+- SMTP_HOST
+- SMTP_PORT
+- SMTP_USER
+- SMTP_PASS
+- SMTP_FROM
+- ALLOWED_ORIGINS
+
+
+FAST EDIT MAP
+
+1. Admin login email/password
+Where to edit:
+- Vercel Dashboard > nickstore project > Settings > Environment Variables
+
+Variables:
+- ADMIN_EMAIL controls the admin login email.
+- ADMIN_PASSWORD controls the admin login password.
+- ADMIN_2FA_ENABLED=true turns email 2FA on.
+
+After changing:
+1. Redeploy in Vercel.
+2. Log out from admin.
+3. Log in again.
+
+Code that uses it:
+- server/index.cjs
+- Search for: adminEmail, adminPassword, adminTwoFactorEnabled
+
+
+2. Admin session timeout
+Where to edit:
+- server/index.cjs
+- Search for: adminSessionTtlMs
+
+Current value:
+- 10 * 60 * 1000 means 10 minutes.
+
+Also edit frontend idle timeout:
+- src/lib/mongodb.ts
+- Search for: ADMIN_IDLE_TIMEOUT_MS
+
+Keep both values the same.
+
+
+3. Receipt checker on/off
+Best way:
+- Open admin dashboard.
+- Go to Payment Methods.
+- Use the Receipt checker switch.
+
+Code:
+- src/pages/admin/PaymentMethods.tsx
+  Controls the admin switch.
+- src/pages/public/Payment.tsx
+  Controls checkout behavior when receipt checker is on/off.
+- server/index.cjs
+  Search for: /api/settings/public and /api/settings/receipt-checker
+
+Database setting:
+- settings collection
+- key: receipt_checker_enabled
+
+
+4. Payment QR not showing
+Admin way:
+- Admin dashboard > Payment Methods.
+- Edit payment method.
+- Upload/change QR image.
+- Make sure the payment method is active.
+
+Code:
+- src/pages/admin/PaymentMethods.tsx
+  Admin payment method editor.
+- src/components/public/PaymentMethodCard.tsx
+  Public payment method card.
+- src/pages/public/Payment.tsx
+  Checkout page where the QR appears.
+
+Data fields:
+- qr_image_url stores the QR image.
+- is_active decides if customers can see it.
+
+
+5. Telegram order notification
+Where to edit:
+- server/index.cjs
+
+Search for:
+- buildTelegramOrderMessage
+- sendTelegramMessage
+- sendTelegramPhoto
+
+What it does:
+- buildTelegramOrderMessage creates the text sent to Telegram.
+- sendTelegramMessage sends the order details.
+- sendTelegramPhoto sends the receipt image if the customer uploaded one.
+
+Supplier command format:
+/order (supplier code) (GameID) (serverID if any)
+
+If you want to change the Telegram text:
+- Edit buildTelegramOrderMessage only.
+- Do not expose admin password, raw product cost, or private tokens in the message.
+
+
+6. Telegram bot token/chat ID
+Where to edit:
+- Vercel Dashboard > nickstore project > Settings > Environment Variables
+
+Variables:
+- TELEGRAM_BOT_TOKEN
+- TELEGRAM_CHAT_ID
+
+Code:
+- server/index.cjs
+- Search for: telegramBotToken and telegramChatId
+
+After changing:
+1. Redeploy.
+2. Use admin dashboard test Telegram button.
+
+
+7. Product/game logos
+Where to edit:
+- server/index.cjs
+
+Search for:
+- buildGameLogoDataUrl
+- gameLogoPalettes
+- sanitizeGame
+
+What it does:
+- buildGameLogoDataUrl creates a generated logo image for each game.
+- gameLogoPalettes controls logo colors.
+- sanitizeGame attaches the logo before sending games to the frontend.
+
+If you want real uploaded logos later:
+- Add image_url on each game in MongoDB or the admin Games page.
+- Then change sanitizeGame to prefer existing image_url before generated logo.
+
+
+8. Add or remove games/products
+Best way:
+- Admin dashboard > Games
+- Admin dashboard > Products
+
+Code:
+- src/pages/admin/Games.tsx controls the Games admin page.
+- src/pages/admin/Products.tsx controls the Products admin page.
+- src/hooks/useGames.ts loads and edits games.
+- src/hooks/useProducts.ts loads and edits products.
+- src/lib/mongodb.ts sends requests to the API.
+- server/index.cjs has /api/games and /api/products.
+
+Important:
+- Public customers only see active games and active products.
+- Inactive games/products can still be managed in admin.
+
+
+9. Remove games/products that are not in the pricelist
+Admin/API:
+- POST /api/catalog/prune-to-pricelist
+
+Code:
+- server/index.cjs
+- Search for: /api/catalog/prune-to-pricelist
+
+What it does:
+- Keeps only supplier/pricelist games and products.
+- Removes orphan products.
+- Recreates missing pricelist games when needed.
+
+
+10. Import a new pricelist
+Where to edit:
+- server/index.cjs
+- Search for: /api/catalog/import-pricelist
+
+Input format:
+Game,Page,No,Item,Price RM,Code
+mlid,1/1,1,5 Diamonds,0.33,MLP5
+
+Admin UI:
+- Products page has catalog controls.
+
+Special Valorant split:
+- VPID codes are Valorant ID.
+- VPMY codes are Valorant MY.
+
+
+11. Markup percentage
+Admin way:
+- Admin dashboard > Products.
+- Use bulk markup to update all products or one game.
+- You can still edit a single product manually.
+
+Code:
+- src/pages/admin/Products.tsx
+  Markup controls.
+- server/index.cjs
+  Search for: /api/catalog/markup
+
+Fields:
+- cost_price is your base supplier price.
+- markup_percent is your profit percentage.
+- price is customer selling price.
+- original_price is optional old price for promos.
+
+Security:
+- Public product API does not send cost_price or supplier_code to customers.
+
+
+12. Promo old price and promo price
+Where to edit:
+- Admin dashboard > Products > edit product.
+
+Fields:
+- price = current selling price.
+- original_price = old crossed-out price.
+
+Frontend display:
+- src/components/public/ProductCard.tsx
+
+
+13. Active/inactive filters
+Where to edit:
+- src/pages/admin/Games.tsx
+- src/pages/admin/Products.tsx
+
+What it does:
+- Admin can filter active and inactive entries.
+- Customers only see active entries.
+
+Backend:
+- server/index.cjs
+- GET /api/games
+- GET /api/products
+
+
+14. Checkout form fields
+Where to edit:
+- src/pages/public/OrderForm.tsx
+
+Common changes:
+- Change required fields.
+- Change labels.
+- Change how Game ID/server ID are collected.
+
+Important:
+- Do not calculate final price only on the frontend.
+- The backend already recalculates the product price in server/index.cjs.
+
+
+15. Payment page and receipt upload
+Where to edit:
+- src/pages/public/Payment.tsx
+
+What it controls:
+- Payment method selection.
+- QR display.
+- Receipt upload.
+- OCR receipt checker.
+- Final order submit.
+
+Receipt validation file:
+- src/lib/receiptValidation.ts
+
+Backend order creation:
+- server/index.cjs
+- Search for: app.post('/api/orders'
+
+
+16. Order status lookup
+Where to edit:
+- src/pages/public/OrderStatus.tsx
+
+Security behavior:
+- Customers must search by order number.
+- Public order lookup does not show receipt image.
+- Admin order panel can see receipt images.
+
+
+17. Admin order panel and receipt preview
+Where to edit:
+- src/pages/admin/Orders.tsx
+- src/components/admin/OrderDetailModal.tsx
+- src/components/admin/OrderTable.tsx
+
+What it controls:
+- Order list.
+- Order status updates.
+- Receipt preview.
+- Supplier command copy text.
+
+
+18. Homepage design
+Where to edit:
+- src/pages/public/Home.tsx
+- src/components/public/Navbar.tsx
+- src/components/public/Footer.tsx
+- src/components/public/GameCard.tsx
+
+Product cards:
+- src/components/public/ProductCard.tsx
+
+Global styles:
+- src/index.css
+- tailwind.config.js
+
+
+19. Admin design
+Where to edit:
+- src/components/admin/AdminSidebar.tsx
+- src/pages/admin/Dashboard.tsx
+- src/pages/admin/Games.tsx
+- src/pages/admin/Products.tsx
+- src/pages/admin/Orders.tsx
+- src/pages/admin/PaymentMethods.tsx
+
+
+20. API security controls
+Where to edit:
+- server/index.cjs
+
+Search for:
+- allowedOrigins
+- createRateLimiter
+- authRateLimit
+- orderRateLimit
+- requireAdmin
+- sanitizePublicProduct
+- sanitizeOrder
+
+What each one does:
+- allowedOrigins decides which websites can call the API from a browser.
+- createRateLimiter limits spammy requests.
+- authRateLimit protects login and 2FA.
+- orderRateLimit protects order creation.
+- requireAdmin blocks admin changes without a valid admin session token.
+- sanitizePublicProduct removes private product fields before customers see them.
+- sanitizeOrder removes private receipt data from public order lookup.
+
+
+21. API route labels
+File:
+- server/index.cjs
+
+Routes:
+- POST /api/auth/login
+  Admin login. May require 2FA.
+- POST /api/auth/verify-2fa
+  Verifies email code and creates an admin session.
+- GET /api/games
+  Public/admin game list. Public sees active games only.
+- POST /api/games
+  Admin creates a game.
+- PUT /api/games/:id
+  Admin edits a game.
+- DELETE /api/games/:id
+  Admin deletes a game.
+- GET /api/products
+  Public/admin product list. Public gets sanitized active products only.
+- POST /api/products
+  Admin creates a product.
+- PUT /api/products/:id
+  Admin edits a product.
+- DELETE /api/products/:id
+  Admin deletes a product.
+- GET /api/settings/public
+  Public settings, currently receipt checker status.
+- PUT /api/settings/receipt-checker
+  Admin turns receipt checker on/off.
+- POST /api/catalog/seed-market
+  Admin imports starter market catalog.
+- POST /api/catalog/import-pricelist
+  Admin imports CSV pricelist.
+- POST /api/catalog/markup
+  Admin applies markup percent.
+- POST /api/catalog/prune-to-pricelist
+  Admin removes non-pricelist games/products.
+- GET /api/orders
+  Admin sees all orders. Public can search by order_number only.
+- POST /api/orders
+  Customer creates order. Backend recalculates price.
+- PUT /api/orders/:id
+  Admin updates an order.
+- DELETE /api/orders/:id
+  Admin deletes an order.
+- POST /api/telegram/test-order
+  Admin sends a test Telegram order.
+- GET /api/payment-methods
+  Public/admin payment method list. Public sees active only.
+- POST /api/payment-methods
+  Admin creates payment method.
+- PUT /api/payment-methods/:id
+  Admin edits payment method.
+- DELETE /api/payment-methods/:id
+  Admin deletes payment method.
+
+
+22. Frontend code labels
+
+src/App.tsx
+- Main route setup for public and admin pages.
+
+src/lib/mongodb.ts
+- Frontend API helper.
+- Adds admin Authorization token automatically.
+- Stores admin session in localStorage.
+- Contains emergency fallback data for local/dev mode.
+
+src/contexts/AuthContext.tsx
+- Admin login state.
+- Logout behavior.
+- Idle session checking.
+
+src/hooks/useGames.ts
+- Loads, creates, edits, deletes games.
+
+src/hooks/useProducts.ts
+- Loads, creates, edits, deletes products.
+- Applies markup.
+
+src/hooks/useOrders.ts
+- Loads orders.
+- Creates orders.
+- Updates order status.
+- Looks up public order status.
+
+src/hooks/usePaymentMethods.ts
+- Loads, creates, edits, deletes payment methods.
+
+src/pages/public/Home.tsx
+- Public homepage.
+
+src/pages/public/Games.tsx
+- Public all-games listing.
+
+src/pages/public/GameDetail.tsx
+- Public product selection for one game.
+
+src/pages/public/OrderForm.tsx
+- Customer enters game ID, server ID, contact details.
+
+src/pages/public/Payment.tsx
+- QR payment, receipt upload, receipt checker, order creation.
+
+src/pages/public/OrderSuccess.tsx
+- Success screen after checkout.
+
+src/pages/public/OrderStatus.tsx
+- Customer order tracking by order number.
+
+src/pages/admin/Login.tsx
+- Admin login and 2FA screen.
+
+src/pages/admin/Dashboard.tsx
+- Admin summary, charts, Telegram test button.
+
+src/pages/admin/Games.tsx
+- Admin game management.
+
+src/pages/admin/Products.tsx
+- Admin product management, filters, markup.
+
+src/pages/admin/Orders.tsx
+- Admin order management.
+
+src/pages/admin/PaymentMethods.tsx
+- Admin payment methods and receipt checker toggle.
+
+
+23. What to test after urgent edits
+
+Always test these after a change:
+1. npm run build
+2. Open homepage.
+3. Open a game.
+4. Select product and continue checkout.
+5. Confirm payment QR appears.
+6. Upload receipt.
+7. Create test order.
+8. Check Telegram receives order details and receipt.
+9. Login admin.
+10. Open order details and confirm receipt is visible.
+11. Try admin logout.
+12. Wait 10 minutes idle and confirm admin gets logged out.
+
+
+24. Common emergency fixes
+
+If admin cannot log in:
+- Check ADMIN_EMAIL and ADMIN_PASSWORD in Vercel env.
+- If 2FA email is broken, set ADMIN_2FA_ENABLED=false temporarily.
+- Redeploy.
+
+If Telegram order does not arrive:
+- Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.
+- Make sure you started the bot/chat.
+- Use admin dashboard test Telegram button.
+
+If customers see wrong price:
+- Check product cost_price, markup_percent, price, original_price in admin Products.
+- Backend uses product_id to recalculate the order total.
+
+If receipt image does not show in admin:
+- Check the order has receipt_image_url in MongoDB.
+- Check src/components/admin/OrderDetailModal.tsx.
+- Make sure you are logged in with a fresh admin session.
+
+If public products expose private data:
+- Check server/index.cjs.
+- Search for sanitizePublicProduct.
+- Do not include cost_price, supplier_code, provider_slug, or market_reference in public output.
+
+If too many games/products show:
+- Run the prune-to-pricelist admin action or API.
+- Public only shows active games/products.
+

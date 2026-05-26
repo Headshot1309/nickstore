@@ -111,7 +111,7 @@ const readAdminSession = (): StoredAdminSession | null => {
   }
 };
 
-const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
+export const apiRequest = async <T>(path: string, options?: RequestInit): Promise<T> => {
   const adminSession = readAdminSession();
   const headers = new Headers(options?.headers);
   headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
@@ -134,7 +134,7 @@ const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
 
 const listFromApi = async <T>(collection: CollectionName, fallback: T[], query = ''): Promise<ApiListResponse<T>> => {
   try {
-    const response = await request<ApiListResponse<T>>(`/api/${collection}${query}`);
+    const response = await apiRequest<ApiListResponse<T>>(`/api/${collection}${query}`);
     const documents = Array.isArray(response.documents) ? response.documents : [];
     return { documents, total: response.total ?? documents.length };
   } catch (error) {
@@ -147,7 +147,7 @@ const listFromApi = async <T>(collection: CollectionName, fallback: T[], query =
 
 const mutation = async <T>(path: string, method: string, data?: any, fallback?: () => T): Promise<T> => {
   try {
-    return await request<T>(path, {
+    return await apiRequest<T>(path, {
       method,
       body: data ? JSON.stringify(data) : undefined,
     });
@@ -231,7 +231,7 @@ export const touchAdminSession = () => {
 
 export const settingsCollection = {
   getPublic: async () =>
-    request<{ receipt_checker_enabled: boolean }>('/api/settings/public'),
+    apiRequest<{ receipt_checker_enabled: boolean }>('/api/settings/public'),
   updateReceiptChecker: async (enabled: boolean) =>
     mutation('/api/settings/receipt-checker', 'PUT', { enabled }, () => ({
       success: true,
@@ -341,7 +341,7 @@ export const account = {
     throw new Error('No session found');
   },
   createEmailPasswordSession: async (email: string, password: string) => {
-    const response = await request<{
+    const response = await apiRequest<{
       success: boolean;
       user?: { $id: string; email: string; name: string };
       session_token?: string;
@@ -369,7 +369,7 @@ export const account = {
     return response.user;
   },
   verifyEmailCode: async (challengeId: string, code: string) => {
-    const response = await request<{ success: boolean; user?: { $id: string; email: string; name: string }; session_token?: string; message?: string }>('/api/auth/verify-2fa', {
+    const response = await apiRequest<{ success: boolean; user?: { $id: string; email: string; name: string }; session_token?: string; message?: string }>('/api/auth/verify-2fa', {
       method: 'POST',
       body: JSON.stringify({ challenge_id: challengeId, code }),
     });

@@ -5,6 +5,7 @@ import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { useAdminProducts } from '@/hooks/useProducts';
 import { useAdminGames } from '@/hooks/useGames';
 import { useAuth } from '@/contexts/AuthContext';
+import { apiRequest } from '@/lib/mongodb';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -180,10 +181,8 @@ const Products: React.FC = () => {
   const handleImportMarketCatalog = async () => {
     setImportingCatalog(true);
     try {
-      const response = await fetch('/api/catalog/seed-market', { method: 'POST' });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
+      const data = await apiRequest<{ success: boolean; message?: string }>('/api/catalog/seed-market', { method: 'POST' });
+      if (!data.success) {
         throw new Error(data.message || 'Failed to import catalog');
       }
 

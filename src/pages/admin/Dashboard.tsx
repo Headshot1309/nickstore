@@ -20,6 +20,7 @@ import { StatCard } from '@/components/admin/StatCard';
 import { OrderTable } from '@/components/admin/OrderTable';
 import { useOrderStats, useAdminOrders } from '@/hooks/useOrders';
 import { useAuth } from '@/contexts/AuthContext';
+import { apiRequest } from '@/lib/mongodb';
 import { Button } from '@/components/ui/button';
 import {
   AreaChart,
@@ -74,14 +75,11 @@ const Dashboard: React.FC = () => {
   const handleTestTelegram = async () => {
     setSendingTest(true);
     try {
-      const response = await fetch('/api/telegram/test-order', {
+      const data = await apiRequest<{ success: boolean; message?: string }>('/api/telegram/test-order', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note: 'testing bot' }),
       });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.message || 'Failed to send test message.');
       }
 

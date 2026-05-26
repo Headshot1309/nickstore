@@ -8,8 +8,61 @@ const { marketCatalogGames, marketCatalogProducts } = require('./catalog-seed.cj
 const app = express();
 const port = 3001;
 
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+const allowedOrigins = new Set([
+  'https://nickstore-iota.vercel.app',
+  'https://nickstore-headshot1309-8399s-projects.vercel.app',
+  'https://nickstore-git-main-headshot1309-8399s-projects.vercel.app',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  ...(process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+]);
+
+const rateLimitBuckets = new Map();
+const createRateLimiter = ({ windowMs, max, keyPrefix }) => (req, res, next) => {
+  const forwardedFor = String(req.headers['x-forwarded-for'] || '');
+  const ip = forwardedFor.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  const key = `${keyPrefix}:${ip}`;
+  const now = Date.now();
+  const bucket = rateLimitBuckets.get(key) || { count: 0, resetAt: now + windowMs };
+
+  if (bucket.resetAt <= now) {
+    bucket.count = 0;
+    bucket.resetAt = now + windowMs;
+  }
+
+  bucket.count += 1;
+  rateLimitBuckets.set(key, bucket);
+
+  if (bucket.count > max) {
+    return res.status(429).json({ success: false, message: 'Too many requests. Please try again later.' });
+  }
+
+  next();
+};
+
+const authRateLimit = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 20, keyPrefix: 'auth' });
+const orderRateLimit = createRateLimiter({ windowMs: 60 * 1000, max: 12, keyPrefix: 'order' });
+
+app.set('trust proxy', 1);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.has(origin) || /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error('CORS origin blocked'));
+  },
+}));
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('X-Frame-Options', 'DENY');
+  next();
+});
+app.use(express.json({ limit: '15mb' }));
 app.use(express.text({ type: ['text/*', 'application/csv'], limit: '10mb' }));
 
 const uri = process.env.MONGODB_URI;
@@ -268,7 +321,6 @@ const sanitizePublicProduct = (doc) => ({
   denomination: doc.denomination,
   price: doc.price,
   original_price: doc.original_price,
-  description: doc.description,
   is_active: doc.is_active,
   created_at: doc.created_at,
   updated_at: doc.updated_at,
@@ -501,7 +553,7 @@ const toObjectId = (id) => {
 };
 
 // Auth endpoints
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authRateLimit, async (req, res) => {
   try {
     const { email, password } = req.body;
     
@@ -1119,7 +1171,7 @@ app.get('/api/orders', async (req, res) => {
   }
 });
 
-app.post('/api/orders', async (req, res) => {
+app.post('/api/orders', orderRateLimit, async (req, res) => {
   try {
     const database = await getDb();
     const product = await database.collection('products').findOne({
@@ -1171,7 +1223,7 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
-app.post('/api/auth/verify-2fa', async (req, res) => {
+app.post('/api/auth/verify-2fa', authRateLimit, async (req, res) => {
   try {
     const { challenge_id: challengeId, code } = req.body;
 
