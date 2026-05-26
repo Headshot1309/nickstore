@@ -794,15 +794,44 @@ app.post('/api/catalog/prune-to-pricelist', async (_req, res) => {
         .map((product) => String(product.game_id || ''))
         .filter(Boolean)
     );
-    const supplierGameObjectIds = Array.from(supplierGameIds)
-      .map((id) => {
-        try {
-          return new ObjectId(id);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
+    const supplierProductsByGameId = supplierProducts.reduce((groups, product) => {
+      const gameId = String(product.game_id || '');
+      if (!gameId) return groups;
+      groups[gameId] = groups[gameId] || [];
+      groups[gameId].push(product);
+      return groups;
+    }, {});
+    const supplierGameObjectIds = [];
+    const supplierStringGameIds = [];
+
+    for (const id of supplierGameIds) {
+      try {
+        supplierGameObjectIds.push(new ObjectId(id));
+      } catch {
+        supplierStringGameIds.push(id);
+      }
+    }
+
+    const existingGames = await database.collection('games').find({}).toArray();
+    const existingGameIds = new Set(existingGames.map((game) => String(game._id)));
+
+    for (const id of supplierStringGameIds) {
+      if (existingGameIds.has(id)) continue;
+      const sampleProduct = supplierProductsByGameId[id]?.[0];
+      const catalogGame = marketCatalogGames.find((game) => game.key === sampleProduct?.provider_slug);
+      await database.collection('games').insertOne({
+        _id: id,
+        name: catalogGame?.name || sampleProduct?.game_name || sampleProduct?.provider_slug || id,
+        description: catalogGame?.description || `Imported pricelist catalog for ${sampleProduct?.game_name || id}.`,
+        image_id: '',
+        image_url: catalogGame?.image_url || '',
+        provider_slug: sampleProduct?.provider_slug || id,
+        service_count: catalogGame?.service_count,
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      });
+    }
 
     const productDeleteResult = await database.collection('products').deleteMany({
       $or: [
@@ -816,15 +845,20 @@ app.post('/api/catalog/prune-to-pricelist', async (_req, res) => {
       ],
     });
 
-    const gameDeleteQuery = supplierGameObjectIds.length > 0
-      ? { _id: { $nin: supplierGameObjectIds } }
-      : {};
-    const gameDeleteResult = await database.collection('games').deleteMany(gameDeleteQuery);
-
-    await database.collection('games').updateMany(
-      { _id: { $in: supplierGameObjectIds } },
-      { $set: { is_active: true, updated_at: now } }
+    const keepGameFilters = [
+      ...supplierGameObjectIds.map((id) => ({ _id: id })),
+      ...supplierStringGameIds.map((id) => ({ _id: id })),
+    ];
+    const gameDeleteResult = await database.collection('games').deleteMany(
+      keepGameFilters.length > 0 ? { $nor: keepGameFilters } : {}
     );
+
+    if (keepGameFilters.length > 0) {
+      await database.collection('games').updateMany(
+        { $or: keepGameFilters },
+        { $set: { is_active: true, updated_at: now } }
+      );
+    }
 
     await database.collection('products').updateMany(
       {
