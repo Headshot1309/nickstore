@@ -570,6 +570,80 @@ const sanitizePublicProduct = (doc) => ({
   updated_at: doc.updated_at,
 });
 
+const hashReceiptDataUrl = (dataUrl = '') => {
+  const value = safeString(dataUrl, 12_000_000);
+  if (!value) return '';
+  return crypto.createHash('sha256').update(value).digest('hex');
+};
+
+const sanitizeReceiptValidation = async (database, validation, totalAmount, receiptImageUrl) => {
+  if (!validation) return undefined;
+
+  const expectedAmount = Number(totalAmount);
+  const manipulationFlags = Array.isArray(validation.manipulationFlags)
+    ? validation.manipulationFlags.map((flag) => safeString(flag, 180)).filter(Boolean).slice(0, 8)
+    : [];
+  const clientRisk = ['low', 'medium', 'high'].includes(validation.manipulationRisk)
+    ? validation.manipulationRisk
+    : 'medium';
+  const receiptUploadHash = hashReceiptDataUrl(receiptImageUrl);
+  let duplicateReceipt = false;
+
+  if (receiptUploadHash) {
+    duplicateReceipt = Boolean(await database.collection('orders').findOne({
+      'receipt_validation.receiptUploadHash': receiptUploadHash,
+    }));
+  }
+
+  if (duplicateReceipt) {
+    manipulationFlags.push('Same uploaded receipt image was already used on another order');
+  }
+
+  const manipulationRisk = duplicateReceipt || clientRisk === 'high'
+    ? 'high'
+    : manipulationFlags.length > 0 || clientRisk === 'medium'
+      ? 'medium'
+      : 'low';
+  const amountMatched =
+    validation.amountMatched === true &&
+    Math.abs(Number(validation.expectedAmount) - expectedAmount) <= 0.01;
+  const accepted =
+    validation.accepted === true &&
+    validation.recipientMatched === true &&
+    validation.timeMatched === true &&
+    amountMatched &&
+    manipulationRisk !== 'high';
+
+  return {
+    accepted,
+    recipientMatched: validation.recipientMatched === true,
+    timeMatched: validation.timeMatched === true,
+    amountMatched,
+    manipulationRisk,
+    manipulationFlags,
+    duplicateReceipt,
+    ocrConfidence: Number.isFinite(Number(validation.ocrConfidence)) ? Math.round(Number(validation.ocrConfidence)) : undefined,
+    receiptHash: safeString(validation.receiptHash, 96),
+    receiptUploadHash,
+    imageWidth: Number.isFinite(Number(validation.imageWidth)) ? Number(validation.imageWidth) : undefined,
+    imageHeight: Number.isFinite(Number(validation.imageHeight)) ? Number(validation.imageHeight) : undefined,
+    detectedAmount: Number.isFinite(Number(validation.detectedAmount)) ? Number(validation.detectedAmount) : undefined,
+    expectedAmount,
+    detectedReceiptTime: safeString(validation.detectedReceiptTime, 80),
+    minutesDifference: Number.isFinite(Number(validation.minutesDifference)) ? Number(validation.minutesDifference) : undefined,
+    message: accepted
+      ? safeString(validation.message || 'Receipt accepted. Manipulation checks passed.', 260)
+      : `Receipt needs admin review: ${
+          [
+            validation.recipientMatched === true ? '' : 'recipient mismatch',
+            validation.timeMatched === true ? '' : 'time mismatch',
+            amountMatched ? '' : 'amount mismatch',
+            manipulationRisk === 'high' ? 'manipulation risk detected' : '',
+          ].filter(Boolean).join(', ')
+        }.`,
+  };
+};
+
 const normalizePopularRows = (rows = []) =>
   rows.map((row, index) => ({
     rank: index + 1,
@@ -789,6 +863,9 @@ const buildTelegramOrderMessage = (order) => {
     `<b>Total:</b> ${escapeTelegramHtml(formatCurrency(order.total_amount))}`,
     `<b>Payment:</b> ${escapeTelegramHtml(order.payment_method_name)}`,
     order.receipt_validation?.accepted ? '<b>Receipt:</b> Verified by OCR' : '<b>Receipt:</b> Needs admin review',
+    order.receipt_validation?.manipulationRisk ? `<b>Manipulation Risk:</b> ${escapeTelegramHtml(String(order.receipt_validation.manipulationRisk).toUpperCase())}` : '',
+    order.receipt_validation?.ocrConfidence ? `<b>OCR Confidence:</b> ${escapeTelegramHtml(`${order.receipt_validation.ocrConfidence}%`)}` : '',
+    order.receipt_validation?.manipulationFlags?.length ? `<b>Risk Flags:</b> ${escapeTelegramHtml(order.receipt_validation.manipulationFlags.join(' | '))}` : '',
     order.receipt_validation?.detectedAmount ? `<b>Receipt Amount:</b> ${escapeTelegramHtml(formatCurrency(order.receipt_validation.detectedAmount))}` : '',
     `<b>Status:</b> ${escapeTelegramHtml(order.status || 'pending')}`,
     `<b>Date:</b> ${escapeTelegramHtml(formatOrderDate(order.created_at))}`,
@@ -1608,13 +1685,13 @@ app.post('/api/orders', orderRateLimit, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Game ID is required.' });
     }
 
-    const receiptValidation = req.body.receipt_validation
-      ? {
-          ...req.body.receipt_validation,
-          expectedAmount: totalAmount,
-          amountMatched: req.body.receipt_validation.amountMatched === true && Number(req.body.receipt_validation.expectedAmount) === totalAmount,
-        }
-      : undefined;
+    const receiptImageUrl = safeString(req.body.receipt_image_url, 12_000_000);
+    const receiptValidation = await sanitizeReceiptValidation(
+      database,
+      req.body.receipt_validation,
+      totalAmount,
+      receiptImageUrl
+    );
     const data = {
       customer_id: customerSession?.customer_id || null,
       order_number: generateOrderNumber(),
@@ -1635,7 +1712,7 @@ app.post('/api/orders', orderRateLimit, async (req, res) => {
       user_phone: safeString(req.body.user_phone, 30),
       payment_method: safeString(req.body.payment_method, 80),
       receipt_image_id: safeString(req.body.receipt_image_id, 120),
-      receipt_image_url: safeString(req.body.receipt_image_url, 12_000_000),
+      receipt_image_url: receiptImageUrl,
       status: 'pending',
       receipt_validation: receiptValidation,
       created_at: new Date(),

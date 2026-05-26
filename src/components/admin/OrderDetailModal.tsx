@@ -216,10 +216,26 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <span>Recipient: {order.receipt_validation.recipientMatched ? 'Matched' : 'Not matched'}</span>
                   <span>Time: {order.receipt_validation.timeMatched ? 'Within 5 minutes' : 'Outside window'}</span>
                   <span>Amount: {order.receipt_validation.amountMatched ? 'Matched' : 'Not matched'}</span>
+                  {order.receipt_validation.manipulationRisk && (
+                    <span>Manipulation risk: {order.receipt_validation.manipulationRisk.toUpperCase()}</span>
+                  )}
+                  {order.receipt_validation.ocrConfidence !== undefined && (
+                    <span>OCR confidence: {order.receipt_validation.ocrConfidence}%</span>
+                  )}
                   {order.receipt_validation.detectedAmount !== undefined && (
                     <span>Detected: RM {order.receipt_validation.detectedAmount.toFixed(2)}</span>
                   )}
                 </div>
+                {order.receipt_validation.manipulationFlags && order.receipt_validation.manipulationFlags.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 p-3 text-xs text-amber-100">
+                    <p className="mb-1 font-semibold">Manipulation checks</p>
+                    <ul className="list-disc space-y-1 pl-4">
+                      {order.receipt_validation.manipulationFlags.map((flag) => (
+                        <li key={flag}>{flag}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -75,6 +75,12 @@ export interface Order {
     recipientMatched: boolean;
     timeMatched: boolean;
     amountMatched: boolean;
+    manipulationRisk?: 'low' | 'medium' | 'high';
+    manipulationFlags?: string[];
+    ocrConfidence?: number;
+    receiptHash?: string;
+    imageWidth?: number;
+    imageHeight?: number;
     detectedAmount?: number;
     expectedAmount?: number;
     detectedReceiptTime?: string;

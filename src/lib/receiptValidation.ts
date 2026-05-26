@@ -5,6 +5,12 @@ export interface ReceiptValidationResult {
   recipientMatched: boolean;
   timeMatched: boolean;
   amountMatched: boolean;
+  manipulationRisk: 'low' | 'medium' | 'high';
+  manipulationFlags: string[];
+  ocrConfidence?: number;
+  receiptHash?: string;
+  imageWidth?: number;
+  imageHeight?: number;
   detectedAmount?: number;
   expectedAmount?: number;
   detectedReceiptTime?: string;
@@ -15,6 +21,7 @@ export interface ReceiptValidationResult {
 
 const requiredRecipient = 'muhammad firdaus';
 const receiptWindowMs = 5 * 60 * 1000;
+const futureGraceMs = 60 * 1000;
 const amountTolerance = 0.01;
 
 const normalizeText = (value: string) =>
@@ -93,8 +100,117 @@ const parseReceiptAmounts = (text: string) => {
   return amounts.filter((amount) => Number.isFinite(amount) && amount > 0);
 };
 
+const getFileHash = async (file: File) => {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+};
+
+const readImageSize = (file: File): Promise<{ width: number; height: number }> =>
+  new Promise((resolve) => {
+    if (!file.type.startsWith('image/')) {
+      resolve({ width: 0, height: 0 });
+      return;
+    }
+
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: 0, height: 0 });
+    };
+    image.src = url;
+  });
+
+const getOcrConfidence = (data: any) => {
+  const confidence = Number(data?.confidence);
+  if (Number.isFinite(confidence) && confidence > 0) return Math.round(confidence);
+
+  const words = Array.isArray(data?.words) ? data.words : [];
+  const wordConfidences = words
+    .map((word: any) => Number(word?.confidence))
+    .filter((value: number) => Number.isFinite(value) && value > 0);
+
+  if (wordConfidences.length === 0) return undefined;
+  return Math.round(wordConfidences.reduce((sum: number, value: number) => sum + value, 0) / wordConfidences.length);
+};
+
+const getManipulationFlags = ({
+  extractedText,
+  ocrConfidence,
+  times,
+  closest,
+  now,
+  amounts,
+  expectedAmount,
+  imageWidth,
+  imageHeight,
+}: {
+  extractedText: string;
+  ocrConfidence?: number;
+  times: Date[];
+  closest?: { date: Date; difference: number };
+  now: Date;
+  amounts: number[];
+  expectedAmount: number;
+  imageWidth: number;
+  imageHeight: number;
+}) => {
+  const flags: string[] = [];
+  const normalized = normalizeText(extractedText);
+
+  if (ocrConfidence !== undefined && ocrConfidence < 55) {
+    flags.push('OCR confidence is low, which can happen on edited, blurry, or cropped receipts');
+  }
+
+  if (extractedText.replace(/\s/g, '').length < 60) {
+    flags.push('Receipt text is unusually short or heavily cropped');
+  }
+
+  if (imageWidth > 0 && imageHeight > 0 && (imageWidth < 500 || imageHeight < 500)) {
+    flags.push('Receipt image resolution is too small for reliable checking');
+  }
+
+  if (closest && closest.date.getTime() - now.getTime() > futureGraceMs) {
+    flags.push('Receipt time appears to be in the future');
+  }
+
+  const uniqueTimeBuckets = new Set(times.map((date) => Math.floor(date.getTime() / 60000)));
+  if (uniqueTimeBuckets.size > 2) {
+    flags.push('Multiple conflicting receipt times were detected');
+  }
+
+  const nearAmount = amounts.some((amount) => Math.abs(amount - expectedAmount) <= amountTolerance);
+  const higherAmounts = amounts.filter((amount) => amount > expectedAmount + amountTolerance);
+  if (nearAmount && higherAmounts.length >= 2) {
+    flags.push('Several larger currency values appear near the matching amount');
+  }
+
+  if (/(edited|photoshop|canva|markup|fake|sample|template|watermark|preview)/i.test(normalized)) {
+    flags.push('Possible editor/template wording detected in the image text');
+  }
+
+  return flags;
+};
+
+const getRiskLevel = (flags: string[], ocrConfidence?: number): ReceiptValidationResult['manipulationRisk'] => {
+  if (flags.some((flag) => /future|conflicting|editor|template|too small/i.test(flag))) return 'high';
+  if (flags.length >= 2 || (ocrConfidence !== undefined && ocrConfidence < 65)) return 'medium';
+  return flags.length > 0 ? 'medium' : 'low';
+};
+
 export const validateReceiptImage = async (file: File, expectedAmount: number): Promise<ReceiptValidationResult> => {
-  const result = await recognize(file, 'eng');
+  const [result, receiptHash, imageSize] = await Promise.all([
+    recognize(file, 'eng'),
+    getFileHash(file),
+    readImageSize(file),
+  ]);
   const extractedText = result.data.text || '';
   const normalizedText = normalizeText(extractedText);
   const recipientMatched = normalizedText.includes(requiredRecipient);
@@ -104,11 +220,29 @@ export const validateReceiptImage = async (file: File, expectedAmount: number): 
     .map((date) => ({ date, difference: Math.abs(now.getTime() - date.getTime()) }))
     .sort((a, b) => a.difference - b.difference)[0];
 
-  const timeMatched = Boolean(closest && closest.difference <= receiptWindowMs);
-  const detectedAmount = parseReceiptAmounts(extractedText)
+  const timeMatched = Boolean(
+    closest &&
+    closest.difference <= receiptWindowMs &&
+    closest.date.getTime() - now.getTime() <= futureGraceMs
+  );
+  const amounts = parseReceiptAmounts(extractedText);
+  const detectedAmount = amounts
     .sort((a, b) => Math.abs(a - expectedAmount) - Math.abs(b - expectedAmount))[0];
   const amountMatched = typeof detectedAmount === 'number' && Math.abs(detectedAmount - expectedAmount) <= amountTolerance;
-  const accepted = recipientMatched && timeMatched && amountMatched;
+  const ocrConfidence = getOcrConfidence(result.data);
+  const manipulationFlags = getManipulationFlags({
+    extractedText,
+    ocrConfidence,
+    times,
+    closest,
+    now,
+    amounts,
+    expectedAmount,
+    imageWidth: imageSize.width,
+    imageHeight: imageSize.height,
+  });
+  const manipulationRisk = getRiskLevel(manipulationFlags, ocrConfidence);
+  const accepted = recipientMatched && timeMatched && amountMatched && manipulationRisk !== 'high';
 
   if (accepted) {
     return {
@@ -116,12 +250,20 @@ export const validateReceiptImage = async (file: File, expectedAmount: number): 
       recipientMatched,
       timeMatched,
       amountMatched,
+      manipulationRisk,
+      manipulationFlags,
+      ocrConfidence,
+      receiptHash,
+      imageWidth: imageSize.width,
+      imageHeight: imageSize.height,
       detectedAmount,
       expectedAmount,
       detectedReceiptTime: closest.date.toISOString(),
       minutesDifference: Math.round((closest.difference / 60000) * 10) / 10,
       extractedText,
-      message: 'Receipt accepted. Recipient and payment time look correct.',
+      message: manipulationRisk === 'medium'
+        ? 'Receipt accepted, but admin will see caution flags for manual review.'
+        : 'Receipt accepted. Recipient, amount, and payment time look correct.',
     };
   }
 
@@ -129,6 +271,7 @@ export const validateReceiptImage = async (file: File, expectedAmount: number): 
     recipientMatched ? '' : 'recipient must show Muhammad Firdaus',
     timeMatched ? '' : 'receipt time must be within 5 minutes',
     amountMatched ? '' : `amount must match RM ${expectedAmount.toFixed(2)}`,
+    manipulationRisk === 'high' ? 'receipt has manipulation risk flags' : '',
   ].filter(Boolean);
 
   return {
@@ -136,6 +279,12 @@ export const validateReceiptImage = async (file: File, expectedAmount: number): 
     recipientMatched,
     timeMatched,
     amountMatched,
+    manipulationRisk,
+    manipulationFlags,
+    ocrConfidence,
+    receiptHash,
+    imageWidth: imageSize.width,
+    imageHeight: imageSize.height,
     detectedAmount,
     expectedAmount,
     detectedReceiptTime: closest?.date.toISOString(),
